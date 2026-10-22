@@ -19,6 +19,7 @@
 
 #ifndef _NODE_FILTER_H_
 #define _NODE_FILTER_H_
+#include <vector>
 
 #include "IVideoEffect.H"
 #include <string>
@@ -76,7 +77,8 @@ class NodeFilter : public IVideoEffect
 		int m_h;
 		uint32_t* m_frame_cache;
 	private:
-		LazyFrame* m_lazy_frame;
+		std::vector<uint32_t> m_packedInput;
+        LazyFrame* m_lazy_frame;
 		gavl_video_frame_t* m_gavl_frame;
 };
 	

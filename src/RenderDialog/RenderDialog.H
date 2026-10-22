@@ -19,11 +19,13 @@
 #include <FL/Fl_Text_Display.H>
 #include <FL/Fl_Hold_Browser.H>
 
+class Fl_Choice;
 class RenderDialog {
 public:
   RenderDialog();
   Fl_Double_Window *dialog_window;
   Fl_File_Input *export_filename;
+  Fl_Choice *stereo_layout;
 private:
   void cb_File_i(Fl_Button*, void*);
   static void cb_File(Fl_Button*, void*);

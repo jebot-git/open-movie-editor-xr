@@ -100,6 +100,7 @@ GmerlinEffect::GmerlinEffect( const char* identifier, bg_plugin_handle_t* plugin
 
 	m_filter->connect_input_port( m_filter_instance, read_video_gmerlin, this, 0, 0 );
 
+	input_format={};
 	input_format.frame_width  = clip->w();
 	input_format.frame_height = clip->h();
 	input_format.image_width  = clip->w();

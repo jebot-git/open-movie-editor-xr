@@ -18,6 +18,10 @@
  */
 
 #include <cmath>
+#include <vector>
+#include <algorithm>
+#include "media/Stereo.H"
+#include "IVideoFile.H"
 #include <cassert>
 #include <tinyxml.h>
 #include <fstream>
@@ -165,34 +169,17 @@ LazyFrame* Timeline::nextFrame( int64_t position ) //only used from VideoViewGL
 }
 LazyFrame** Timeline::getFrameStack( int64_t position )
 {
-	static LazyFrame* frameStack[8]; //At most 8 Frames, ought to be enough for everyone ;)
-	int cnt = 0;
-
-	if ( position < 0 ) {
-		position = m_seekPosition;
-		m_seekPosition += 35280000 / (int)g_fps;
-	}
-	
-	m_playPosition = position;
-	
-	for ( track_node *p = m_allTracks; p; p = p->next ) {
-		VideoTrack* current = dynamic_cast<VideoTrack*>(p->track);
-		if ( !current ) {
-			continue;
-		}
-		LazyFrame** fs = current->getFrameStack( position );
-		
-		for ( int i = 0; fs[i] && cnt <=7 ; i++ ) {
-			frameStack[cnt] = fs[i];
-			cnt++;
-		}
-		if ( cnt == 7 ) {
-			break;
-		}
-	}
-	frameStack[cnt] = 0;
-	return frameStack;
+    auto &stack=m_frameStack;
+    stack.clear();
+    if(position<0){position=m_seekPosition;m_seekPosition+=NLE_TIME_BASE/(int)g_fps;}
+    m_playPosition=position;
+    for(auto p=m_allTracks;p;p=p->next)if(auto track=dynamic_cast<VideoTrack*>(p->track)) {
+        auto frames=track->getFrameStack(position);
+        for(int i=0;frames&&frames[i];++i)stack.push_back(frames[i]);
+    }
+    stack.push_back(nullptr);return stack.data();
 }
+
 int Timeline::fillBuffer( float* output, unsigned long frames )
 {
 	memset( buffer1, 0, sizeof(buffer1) );
@@ -213,7 +200,7 @@ int Timeline::fillBuffer( float* output, unsigned long frames )
 			output[i+1] = buffer1[i+1];
 		}
 		while ( max_frames < frames && m_samplePosition + max_frames < m_soundLength ) {
-			output[max_frames] = 0.0;
+			output[max_frames*2] = output[max_frames*2+1] = 0.0;
 			max_frames++;
 		}
 // 		this is done via sampleseek() from the audio thread
@@ -234,7 +221,7 @@ int Timeline::fillBuffer( float* output, unsigned long frames )
 		p = p->next;
 	}
 	while ( max_frames < frames && m_samplePosition + max_frames < m_soundLength ) {
-		output[max_frames] = 0.0;
+		output[max_frames*2] = output[max_frames*2+1] = 0.0;
 		max_frames++;
 	}
 //	this is done via sampleseek() from the audio thread
@@ -248,55 +235,24 @@ LazyFrame* Timeline::getBlendedFrame()
 }
 LazyFrame* Timeline::getBlendedFrame( int64_t position )
 {
-	LazyFrame** fs = getFrameStack( position );
-	int len = m_blended_lazy_frame->format()->frame_width * m_blended_lazy_frame->format()->frame_height;
-	unsigned char* dst_buffer = m_blended_gavl_frame->planes[0];
-	gavl_video_frame_clear( m_blended_gavl_frame, m_blended_lazy_frame->format() );
-
-	int start = 0;
-	int stop = 0;
-
-	for ( int i = 0; fs[i]; i++ ) {
-		start = i + 1;
-	}
-	if ( start == 1 ) {
-		return fs[0];
-	}
-	if ( !fs[start] ) {
-		start--;
-		if ( start >= 0 ) {
-			unsigned char *src, *dest, *end;
-			fs[start]->set_target( m_blended_lazy_frame->format() );
-			src = fs[start]->target()->planes[0];
-			dest = dst_buffer;
-			end = fs[start]->target()->planes[0] + ( len * 4 );
-			while ( src < end ) {
-				dest[0] = src[0];
-				dest[1] = src[1];
-				dest[2] = src[2];
-				dest[4] = src[4];
-				dest += 4;
-				src += 4;
-			}
-		}
-	}
-	start--;
-	gavl_video_frame_t* gavl_frame = 0;
-	for ( int i = start; i >= stop; i-- ) {
-		fs[i]->set_target( m_blended_lazy_frame->format() );
-		gavl_frame = fs[i]->target();
-		blend_alpha2( dst_buffer, dst_buffer, gavl_frame->planes[0], fs[i]->alpha(), len );
-	}
-
-	return m_blended_lazy_frame;
-	
-	// 0: ganz oben
-	// 1: 
-	// 2: ganz unten, zuerst blitten
-
+    if(!m_blended_lazy_frame||!m_blended_gavl_frame)return nullptr;
+    auto frames=getFrameStack(position);
+    auto format=m_blended_lazy_frame->format();
+    gavl_video_frame_clear(m_blended_gavl_frame,format);
+    int count=0;while(frames[count])++count;
+    for(int i=count-1;i>=0;--i) {
+        frames[i]->set_target(format);auto src=frames[i]->target();
+        for(int y=0;y<format->image_height;++y) {
+            auto dst=m_blended_gavl_frame->planes[0]+y*m_blended_gavl_frame->strides[0];
+            blend_alpha2(dst,dst,src->planes[0]+y*src->strides[0],frames[i]->alpha(),format->image_width);
+        }
+    }
+    m_blended_lazy_frame->alpha(1);m_blended_lazy_frame->dirty(true);return m_blended_lazy_frame;
 }
+
 void Timeline::prepareFormat( const gavl_video_format_t* format )
 {
+    unPrepareFormat();
 	m_blended_lazy_frame = new LazyFrame( format );
 	m_blended_gavl_frame = gavl_video_frame_create( format );
 	m_blended_lazy_frame->put_data( m_blended_gavl_frame );
@@ -323,15 +279,16 @@ void Timeline::clear()
 
 
 
-int Timeline::write( string filename, string name )
+void Timeline::writeDocument(TiXmlDocument &doc,const std::string &name)
 {
-	char buffer[512];
-	TiXmlDocument doc( filename.c_str() );
+    char buffer[512];
 	TiXmlDeclaration* dec = new TiXmlDeclaration( "1.0", "", "no" );
 	doc.LinkEndChild( dec );
 
 	TiXmlElement* project = new TiXmlElement( "open_movie_editor_project" );
 	doc.LinkEndChild( project );
+    project->SetAttribute("stereo_input",stereoInput);project->SetAttribute("stereo_swap",stereoSwap);
+    project->SetAttribute("stereo_output",stereoOutput);project->SetAttribute("stereo_preview",stereoPreview);
 
 	TiXmlElement* item = new TiXmlElement( "version" );
 	project->LinkEndChild( item );
@@ -414,6 +371,8 @@ int Timeline::write( string filename, string name )
 				}*/
 				if ( VideoClip* vc = dynamic_cast<VideoClip*>(cn->clip) ) {
 					clip->SetAttribute( "mute", (int)vc->m_mute );
+                    clip->SetAttribute("stereo_input",vc->file()->stereoOverride());
+                    clip->SetAttribute("stereo_swap",vc->file()->eyeOrderOverride());
 				}
 				if ( TitleClip* tc = dynamic_cast<TitleClip*>(cn->clip) ) {
 					clip->SetAttribute( "text", tc->text() );
@@ -429,8 +388,12 @@ int Timeline::write( string filename, string name )
 		node = node->next;
 	}
 
-	doc.SaveFile();
-	return 1;
+}
+int Timeline::write(std::string filename,std::string name) {TiXmlDocument doc(filename.c_str());writeDocument(doc,name);return doc.SaveFile()?1:0;}
+std::string Timeline::snapshot(){TiXmlDocument doc;writeDocument(doc,"");TiXmlOutStream buffer;buffer << doc;return buffer.c_str();}
+int Timeline::restore(const std::string &xml){TiXmlDocument doc;doc.Parse(xml.c_str());return doc.Error()?0:readDocument(doc);}
+int64_t Timeline::durationTicks() const {
+    int64_t result=0;for(auto node=m_allTracks;node;node=node->next)result=std::max(result,(int64_t)std::llround((long double)node->track->length()*NLE_TIME_BASE/node->track->stretchFactor()));return result;
 }
 int Timeline::read( string filename )
 {
@@ -438,7 +401,16 @@ int Timeline::read( string filename )
 	if ( !doc.LoadFile() ) {
 		return 0;
 	}
+    return readDocument(doc);
+}
+int Timeline::readDocument(TiXmlDocument &doc)
+{
+    auto root=doc.RootElement();if(!root||std::string(root->Value())!="open_movie_editor_project")return 0;
 	this->clear();
+    stereoInput=-1;stereoSwap=-1;stereoOutput=0;stereoPreview=0;
+    root->QueryIntAttribute("stereo_input",&stereoInput);root->QueryIntAttribute("stereo_swap",&stereoSwap);
+    root->QueryIntAttribute("stereo_output",&stereoOutput);root->QueryIntAttribute("stereo_preview",&stereoPreview);
+    DecodeContext context(DecodeContext::eye,stereoInput,stereoSwap);
 	TiXmlHandle docH( &doc );
 
 	const char* versions[] = { "0.0.20061221","0.0.20061219", "0.0.20061128", "0.0.20061121", "0.0.20060901", "0.0.20060630", 0 };
@@ -500,7 +472,8 @@ int Timeline::read( string filename )
 				continue;
 			length = atoll( position_str );
 			
-			strlcpy( filename, j->Attribute( "filename" ), sizeof(filename) );
+			if(!j->Attribute("filename"))continue;
+            ome_strlcpy( filename, j->Attribute( "filename" ), sizeof(filename) );
 			if ( ! filename ) //TODO is this correct?
 				continue;
 			j->Attribute( "mute", &mute );
@@ -558,7 +531,9 @@ int Timeline::read( string filename )
 			} else {
 				IVideoFile* vf = VideoFileFactory::get( filename );
 				if ( vf ) {
-					VideoClip* c = new VideoClip( tr, position, vf, trimA, trimB, -1 );
+					int layout=-1,swap=-1;j->QueryIntAttribute("stereo_input",&layout);j->QueryIntAttribute("stereo_swap",&swap);
+                    vf->configureStereo(layout,swap);
+                    VideoClip* c = new VideoClip( tr, position, vf, trimA, trimB, -1 );
 					vec = c;
 					c->m_mute = mute;
 					TiXmlElement* filterXml = TiXmlHandle( j ).FirstChildElement( "filter" ).Element();
@@ -649,7 +624,8 @@ int Timeline::read( string filename )
 
 			
 			
-			strlcpy( filename, j->Attribute( "filename" ), sizeof(filename) );
+			if(!j->Attribute("filename"))continue;
+            ome_strlcpy( filename, j->Attribute( "filename" ), sizeof(filename) );
 			if ( ! filename )
 				continue;
 			IAudioFile *af = AudioFileFactory::get( filename );
@@ -675,8 +651,7 @@ int Timeline::read( string filename )
 	}
 
 	// TODO: vv--- Remove this, doesn't belong here
-	g_timelineView->redraw();
-	g_timelineView->adjustScrollbar();
+    if(!m_render_mode && g_timelineView){g_timelineView->redraw();g_timelineView->adjustScrollbar();}
 	return 1;
 }
 int Timeline::write_smil( std::string filename, int track )
@@ -695,9 +670,10 @@ int Timeline::write_smil( std::string filename, int track )
 	track_node* node = this->getTracks();
 	int i = 0;
 
-	for ( ; i < track; node = node->next ) {
+	for ( ; node && i < track; node = node->next ) {
 		i++;
 	}
+	if(!node || track<0)return 0;
 	clip_node* cn = node->track->getClips();
 	TiXmlElement* seq;
 	TiXmlElement* video;
@@ -710,14 +686,12 @@ int Timeline::write_smil( std::string filename, int track )
 			video->SetAttribute( "src", cn->clip->filename().c_str() );
 			int64_t clipBegin = cn->clip->trimA();
 			int64_t clipEnd = cn->clip->fileLength() - cn->clip->trimB();
-			video->SetAttribute( "clipBegin", timestamp_to_smil_string( clipBegin, 40 ) ); // FIXME: 25fps Hardcoded
-			video->SetAttribute( "clipEnd", timestamp_to_smil_string( clipEnd, 40 ) ); // FIXME: 25fps Hardcoded
+			video->SetAttribute( "clipBegin", timestamp_to_smil_string( clipBegin ) ); // FIXME: 25fps Hardcoded
+			video->SetAttribute( "clipEnd", timestamp_to_smil_string( clipEnd ) ); // FIXME: 25fps Hardcoded
 		}
 		cn = cn->next;
 	}
-	doc.SaveFile();
-	
-	return 1;
+	return doc.SaveFile()?1:0;
 }
 
 int Timeline::write_srt( std::string filename, int track )
@@ -729,9 +703,10 @@ int Timeline::write_srt( std::string filename, int track )
 
 	track_node* node = this->getTracks();
 	int i = 0;
-	for ( ; i < track; node = node->next ) {
+	for ( ; node && i < track; node = node->next ) {
 		i++;
 	}
+	if(!node || track<0)return 0;
 	clip_node* cn = node->track->getClips();
 	TitleClip* title_clip;
 	i = 1;
@@ -739,19 +714,21 @@ int Timeline::write_srt( std::string filename, int track )
 		title_clip = dynamic_cast<TitleClip*>(cn->clip);
 		if ( title_clip ) {
 			int64_t textBegin = title_clip->A();
-			int64_t textEnd = title_clip->B();
+			int64_t textEnd = title_clip->B()+1;
 			string text = title_clip->text();
 			srt_file << i << std::endl;
-			srt_file << timestamp_to_smil_string( textBegin );
+			std::string begin=timestamp_to_smil_string(textBegin),end=timestamp_to_smil_string(textEnd);
+            std::replace(begin.begin(),begin.end(),'.',',');std::replace(end.begin(),end.end(),'.',',');
+            srt_file << begin;
 			srt_file << " --> ";
-			srt_file << timestamp_to_smil_string( textBegin ) << std::endl;
+			srt_file << end << std::endl;
 			srt_file << text << std::endl << std::endl;
+            ++i;
 		}
 		cn = cn->next;
-		i++;
 	}
 	srt_file.close();
-	return 1;
+	return srt_file?1:0;
 }
 
 

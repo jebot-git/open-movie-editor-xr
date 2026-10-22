@@ -19,6 +19,9 @@
 
 #include "EncodingPreset.H"
 #include "VideoWriterQT.H"
+#include "media/FFmpegWriter.H"
+#include "media/EncoderRegistry.H"
+#include <stdexcept>
 #include <cstring>
 #include "sl/sl.h"
 #include <tinyxml.h>
@@ -233,7 +236,7 @@ void EncodingPreset::init( lqt_codec_info_t** audio, lqt_codec_info_t** video )
 			r->next = 0;
 			r->value = q->codecInfo->encoding_parameters[i].val_default;
 			r->info = &( q->codecInfo->encoding_parameters[i] );
-			if ( r->info->type == LQT_PARAMETER_STRING ) {
+			if ( r->info->type == LQT_PARAMETER_STRING || r->info->type == LQT_PARAMETER_STRINGLIST ) {
 				r->value.val_string = strdup( r->value.val_string );
 			}
 			q->parameters = (param_node*)sl_push( q->parameters, r );
@@ -257,7 +260,7 @@ void EncodingPreset::init( lqt_codec_info_t** audio, lqt_codec_info_t** video )
 			r->next = 0;
 			r->value = q->codecInfo->encoding_parameters[i].val_default;
 			r->info = &( q->codecInfo->encoding_parameters[i] );
-			if ( r->info->type == LQT_PARAMETER_STRING ) {
+			if ( r->info->type == LQT_PARAMETER_STRING || r->info->type == LQT_PARAMETER_STRINGLIST ) {
 				r->value.val_string = strdup( r->value.val_string );
 			}
 			q->parameters = (param_node*)sl_push( q->parameters, r );
@@ -651,6 +654,7 @@ EncodingPreset::EncodingPreset( EncodingPreset* preset )
 	m_file_type = preset->m_file_type;
 #endif
 	m_format = preset->m_format;
+    m_stereoLayout = preset->m_stereoLayout;
 	lqt_audio_codecs = g_audio_codec_info;//lqt_query_registry( 1, 0, 1, 0 );
 	lqt_video_codecs = g_video_codec_info;//lqt_query_registry( 0, 1, 1, 0 );
 	construct_CodecParameters( lqt_audio_codecs, lqt_video_codecs, preset );
@@ -664,7 +668,7 @@ EncodingPreset::~EncodingPreset()
 	param_node* r;
 	while ( ( q = (codec_node*)sl_pop( &m_audioCodecs ) ) ) {
 		while ( ( r = (param_node*)sl_pop( &( q->parameters ) ) ) ) {
-		 	if ( r->info->type == LQT_PARAMETER_STRING ) {
+			if ( r->info->type == LQT_PARAMETER_STRING || r->info->type == LQT_PARAMETER_STRINGLIST ) {
 				free( r->value.val_string );
 			}
 			delete r; //FIXME: Seqfault here.
@@ -673,7 +677,7 @@ EncodingPreset::~EncodingPreset()
 	}
 	while ( ( q = (codec_node*)sl_pop( &m_videoCodecs ) ) ) {
 		while ( ( r = (param_node*)sl_pop( &( q->parameters ) ) ) ) {
-		 	if ( r->info->type == LQT_PARAMETER_STRING ) {
+			if ( r->info->type == LQT_PARAMETER_STRING || r->info->type == LQT_PARAMETER_STRINGLIST ) {
 				free( r->value.val_string );
 			}
 			delete r;
@@ -684,7 +688,12 @@ EncodingPreset::~EncodingPreset()
 }
 IVideoFileWriter* EncodingPreset::getFileWriter( const char* filename )
 {
-	return new nle::VideoWriterQT( this, filename );
+	if(ffmpeg_video_encoder(m_format.video_codec)) return new FFmpegWriter(this,filename);
+    if(m_stereoLayout)throw std::runtime_error("Choose an FFmpeg or Intel QSV video codec for SBS export");
+    auto v=lqt_find_video_codec_by_name(m_format.video_codec);auto a=lqt_find_audio_codec_by_name(m_format.audio_codec);
+    bool available=v&&v[0]&&a&&a[0];lqt_destroy_codec_info(v);lqt_destroy_codec_info(a);
+    if(!available)throw std::runtime_error("The selected libquicktime codec is unavailable; choose a native FFmpeg codec");
+    return new nle::VideoWriterQT( this, filename );
 }
 void EncodingPreset::writeXML( TiXmlElement* xml_node )
 {
@@ -692,7 +701,8 @@ void EncodingPreset::writeXML( TiXmlElement* xml_node )
 	TiXmlElement* effect = xml_node;
 	parameter = new TiXmlElement( "parameter" );
 	effect->LinkEndChild( parameter );*/
-	xml_node->SetAttribute( "name", m_format.name );
+	xml_node->SetAttribute( "stereo_layout", m_stereoLayout );
+    xml_node->SetAttribute( "name", m_format.name );
 	TiXmlElement* parameter;
 	
 	parameter = new TiXmlElement( "width" );
@@ -760,6 +770,7 @@ void EncodingPreset::writeXML( TiXmlElement* xml_node )
 }
 void EncodingPreset::readXML( TiXmlElement* xml_node )
 {
+    xml_node->QueryIntAttribute("stereo_layout",&m_stereoLayout);
 	const char* str;
 	str = xml_node->Attribute( "name" );
 	if ( str ) {
@@ -847,4 +858,20 @@ void EncodingPreset::getFormat( video_format* format )
 	*format = m_format;
 }
 	
+
+int EncodingPreset::videoInt(const char *key,int fallback) const {
+  if(!m_currentVideoCodec)return fallback;
+  for(auto p=m_currentVideoCodec->parameters;p;p=p->next)if(!strcmp(p->info->name,key)&&p->info->type==LQT_PARAMETER_INT)return p->value.val_int;
+  return fallback;
+}
+int EncodingPreset::audioInt(const char *key,int fallback) const {
+  if(!m_currentAudioCodec)return fallback;
+  for(auto p=m_currentAudioCodec->parameters;p;p=p->next)if(!strcmp(p->info->name,key)&&p->info->type==LQT_PARAMETER_INT)return p->value.val_int;
+  return fallback;
+}
+std::string EncodingPreset::videoString(const char *key,const char *fallback) const {
+  if(!m_currentVideoCodec)return fallback;
+  for(auto p=m_currentVideoCodec->parameters;p;p=p->next)if(!strcmp(p->info->name,key)&&(p->info->type==LQT_PARAMETER_STRING||p->info->type==LQT_PARAMETER_STRINGLIST))return p->value.val_string?p->value.val_string:fallback;
+  return fallback;
+}
 } /* namespace nle */

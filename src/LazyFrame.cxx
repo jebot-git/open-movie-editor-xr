@@ -19,6 +19,9 @@
 
 #include "LazyFrame.H"
 #include <cassert>
+#include <cstring>
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 using namespace std;
 
@@ -27,7 +30,9 @@ namespace nle
 
 LazyFrame::LazyFrame( const gavl_video_format_t *format )
 {
-	m_cacheable = false;
+	m_alpha=1.0f;m_dirty=true;
+    std::memset(&m_src_format,0,sizeof(m_src_format));std::memset(&m_target_format,0,sizeof(m_target_format));
+    m_cacheable = false;
 	m_converter_RGBA = 0;
 	m_rgba_frame = 0;
 	m_converter_target = 0;
@@ -55,7 +60,9 @@ LazyFrame::LazyFrame( const gavl_video_format_t *format )
 }
 LazyFrame::LazyFrame( int w, int h )
 {
-	m_cacheable = false;
+	m_alpha=1.0f;m_dirty=true;
+    std::memset(&m_src_format,0,sizeof(m_src_format));std::memset(&m_target_format,0,sizeof(m_target_format));
+    m_cacheable = false;
 	m_converter_RGBA = 0;
 	m_rgba_frame = 0;
 	m_converter_target = 0;
@@ -107,6 +114,7 @@ gavl_video_frame_t* LazyFrame::target()
 	if ( !m_converter_target ) {
 		return m_frame;
 	}
+	gavl_video_frame_clear(m_target_frame,&m_target_format);
 	gavl_video_convert( m_converter_target, m_frame, m_target_frame );
 	return m_target_frame;
 
@@ -146,8 +154,16 @@ void LazyFrame::set_target( gavl_video_format_t *format )
 	//gavl_video_options_set_deinterlace_mode( options, GAVL_DEINTERLACE_SCALE );
 	gavl_video_options_set_deinterlace_mode( options, GAVL_DEINTERLACE_NONE );
 
-	gavl_video_options_set_alpha_mode( options, GAVL_ALPHA_BLEND_COLOR );
-	float color[3] = {0.0, 0.0, 0.0};
+	gavl_video_options_set_alpha_mode(options,format->pixelformat==GAVL_RGBA_32?GAVL_ALPHA_IGNORE:GAVL_ALPHA_BLEND_COLOR);
+    gavl_rectangle_f_t source{0,0,double(m_src_format.image_width),double(m_src_format.image_height)};
+    double srcAspect=double(m_src_format.image_width)/m_src_format.image_height*(m_src_format.pixel_height?double(m_src_format.pixel_width)/m_src_format.pixel_height:1);
+    double dstPar=format->pixel_height?double(format->pixel_width)/format->pixel_height:1;
+    double scale=std::min(double(format->image_width)/(srcAspect*dstPar==0?1:srcAspect/dstPar),double(format->image_height));
+    int height=std::max(1,std::min(format->image_height,int(std::llround(scale))));
+    int width=std::max(1,std::min(format->image_width,int(std::llround(height*srcAspect/dstPar))));
+    gavl_rectangle_i_t destination{(format->image_width-width)/2,(format->image_height-height)/2,width,height};
+    gavl_video_options_set_rectangles(options,&source,&destination);
+	float color[4] = {0.0, 0.0, 0.0, 1.0};
 	gavl_video_options_set_background_color( options, color );
 	
 	if ( gavl_video_converter_init( m_converter_target, &m_src_format, &m_target_format ) == 0 ) {
@@ -173,7 +189,7 @@ void LazyFrame::put_data( gavl_video_frame_t* frame )
 }
 void LazyFrame::set_rgb_target( int w, int h )
 {
-	gavl_video_format_t fmt;
+	gavl_video_format_t fmt{};
 	fmt.frame_height = fmt.image_height = h;
 	fmt.frame_width = fmt.image_width = w;
 	fmt.pixel_width = fmt.pixel_height = 1;

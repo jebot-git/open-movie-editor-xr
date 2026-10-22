@@ -42,6 +42,7 @@ class Frei0rFactoryPlugin : public FilterFactory
 		const char* name();
 		const char* identifier();
 	private:
+        std::string m_identifier;
 		f0r_init_f            f0r_init;
 		f0r_deinit_f          f0r_deinit;
 		f0r_get_plugin_info_f f0r_get_plugin_info;

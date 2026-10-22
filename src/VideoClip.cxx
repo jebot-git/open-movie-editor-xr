@@ -29,6 +29,7 @@
 #include "IAudioFile.H"
 #include "helper.H"
 #include "WavArtist.H"
+#include "XmlClipData.H"
 
 namespace nle
 {
@@ -49,6 +50,7 @@ VideoClip::VideoClip( Track* track, int64_t position, IVideoFile* vf, int64_t A,
 	CLEAR_ERRORS();
 
 
+    if(auto xml=dynamic_cast<XmlClipData*>(data)){int layout=-1,swap=-1;if(xml->m_xml){xml->m_xml->QueryIntAttribute("stereo_input",&layout);xml->m_xml->QueryIntAttribute("stereo_swap",&swap);vf->configureStereo(layout,swap);}}
 	setEffects( data );
 
 	if ( track->render_mode() ) { // Render mode

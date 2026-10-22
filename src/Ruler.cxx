@@ -1,3 +1,4 @@
+#include "EditorIntegration.H"
 /*  Ruler.cxx
  *
  *  Copyright (C) 2005 Richard Spindler <richard.spindler AT gmail.com>
@@ -53,7 +54,7 @@ void Ruler::draw()
 	fl_draw_box( FL_UP_BOX, x(), y(), w(), h(), FL_BACKGROUND_COLOR );
 
 	fl_color( FL_FOREGROUND_COLOR );
-	fl_font( FL_HELVETICA, 11 );
+	fl_font(nle::editor_font(),nle::editor_font_size(11));
 	int pixel_start = - (int)( g_timelineView->scrollPosition() * GetZoom() ) - 100 + LEFT_TRACK_SPACING;
 	pixel_start = pixel_start % 100;
 	int pixel_step = 100;

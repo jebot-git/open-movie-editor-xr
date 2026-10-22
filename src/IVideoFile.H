@@ -34,6 +34,10 @@ class IVideoFile : public IVideoReader
 {
 	public:
 		virtual ~IVideoFile() {}
+        virtual void configureStereo(int,int) {}
+        virtual int sourceStereoLayout() const {return 0;}
+        virtual int stereoOverride() const {return -1;}
+        virtual int eyeOrderOverride() const {return -1;}
 		virtual int64_t length() = 0; //TODO: return length in ticks ( length * 1200 )
 		inline int width() { return m_width; }
 		inline int height() { return m_height; }

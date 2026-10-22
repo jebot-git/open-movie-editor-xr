@@ -53,6 +53,8 @@ DocManager::~DocManager()
 	g_docManager = 0;
 }
 
+void DocManager::clear(){clear_command_list(&m_undoList);clear_command_list(&m_redoList);setButtons();}
+
 void DocManager::undo()
 {
 	if ( !canUndo() ) { return; }

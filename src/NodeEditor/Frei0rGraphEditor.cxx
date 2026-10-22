@@ -1,3 +1,4 @@
+#include "EditorIntegration.H"
 #include "Frei0rGraphEditor.H"
 #include "NodeFilterFrei0rFactory.H"
 #include "NodeFilterFrei0rFactoryPlugin.H"
@@ -124,7 +125,7 @@ void Frei0rGraphEditor::draw()
 		for ( int j = 0; j < i->output_count; j++ ) {
 			fl_draw_box( FL_UP_BOX, x() + i->x + ( j * FILTER_IO_SPACING ), y() + i->y + i->h, FILTER_IO_SIZE, FILTER_IO_SIZE, FL_RED );
 		}
-		fl_font( FL_HELVETICA, 12 );
+		fl_font(nle::editor_font(),nle::editor_font_size(12));
 		fl_color( FL_FOREGROUND_COLOR );
 		int text_w, text_h;
 		fl_measure( i->name.c_str(), text_w, text_h );

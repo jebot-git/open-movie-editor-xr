@@ -18,6 +18,7 @@
  */
 
 #include "MainFilterFactory.H"
+#include "media/MissingEffect.H"
 #include "IEffectMenu.H"
 #include "sl/sl.h"
 
@@ -35,6 +36,7 @@ MainFilterFactory::MainFilterFactory()
 }
 MainFilterFactory::~MainFilterFactory()
 {
+    for(auto &item:m_missing)delete item.second;
 	filter_factory_node* node;
 	while ( ( node = (filter_factory_node*)sl_pop( &m_factories ) ) ) {
 		delete node;
@@ -51,13 +53,14 @@ void MainFilterFactory::add( const char* identifier, FilterFactory* factory )
 }
 FilterFactory* MainFilterFactory::get( const char* identifier )
 {
+    if(!identifier)return nullptr;
 	filter_factory_node* p;
 	for ( p = m_factories; p; p = p->next ) {
 		if ( identifier == p->identifier ) {
 			return p->factory;
 		}
 	}
-	return 0;
+	auto &missing=m_missing[identifier];if(!missing)missing=new MissingEffectFactory(identifier);return missing;
 
 }
 void MainFilterFactory::addAll( IEffectMenu* menu )

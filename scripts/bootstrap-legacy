@@ -1,0 +1,40 @@
+#!/bin/bash
+# Fedora/Nobara x86_64: build private upstream compatibility dependencies.
+set -euo pipefail
+ome_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$ome_root"
+mkdir -p .deps/rpms .deps/sysroot .deps/install .deps/gmerlin-build
+# Runtime Gavl and PortAudio are provided by the host. Nothing is installed as root.
+for package in gavl-devel-1.4.0-40.fc44.x86_64 'libquicktime-1.2.4^20240202git2213b76-3.fc44.x86_64' 'libquicktime-devel-1.2.4^20240202git2213b76-3.fc44.x86_64' portaudio-devel-19.7.0-3.fc44.x86_64 libdv-1.0.0-46.fc44.x86_64 schroedinger-1.0.11-35.fc44.x86_64; do
+  if [[ ! -f .deps/rpms/$package.rpm ]]; then dnf download --destdir .deps/rpms "$package"; fi
+  (cd .deps/sysroot; rpm2cpio "../rpms/$package.rpm" | cpio -idm --quiet)
+done
+ln -sfn /usr/lib64/libgavl.so.1 .deps/sysroot/usr/lib64/libgavl.so.1.0.0
+ln -sfn /usr/lib64/libportaudio.so.2 .deps/sysroot/usr/lib64/libportaudio.so.2.0.0
+sed -i "s@=/usr@=$ome_root/.deps/sysroot/usr@g" .deps/sysroot/usr/lib64/pkgconfig/*.pc
+export PKG_CONFIG_PATH="$ome_root/.deps/sysroot/usr/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+if [[ ! -f .deps/gmerlin-1.2.0.tar.gz ]]; then
+  curl -fL --retry 3 https://downloads.sourceforge.net/project/gmerlin/gmerlin/1.2.0/gmerlin-1.2.0.tar.gz -o .deps/gmerlin-1.2.0.tar.gz
+fi
+printf '%s\n' '80a217c417b197562961cfd55bf5d356d7eb5278601f6f5e05636455822e3d62  .deps/gmerlin-1.2.0.tar.gz' | sha256sum -c -
+[[ -d .deps/gmerlin-1.2.0 ]] || tar -xzf .deps/gmerlin-1.2.0.tar.gz -C .deps
+cd .deps/gmerlin-build
+../gmerlin-1.2.0/configure --prefix="$ome_root/.deps/install" --disable-lqt --disable-player --disable-transcoder --disable-recorder --disable-visualizer --disable-thumbnailer --disable-nmjedit --disable-alsamixer --disable-plugincfg --disable-kbd CFLAGS='-O2 -fcommon -Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-int-conversion'
+# GCC 16 defaults to C23. Gmerlin predates prototypes and requires C11;
+# its configure CPU check incorrectly disables SSE on x86_64.
+python3 - <<'PY'
+from pathlib import Path
+for path in Path('.').rglob('Makefile'):
+ s=path.read_text().replace('-mno-sse -mno-sse2','-msse2')
+ s=s.replace('CFLAGS = ','CFLAGS = -std=gnu11 -include stdlib.h -include string.h -include stdio.h ')
+ if path==Path('lib/Makefile'):s+='\nlibgmerlin_la_LIBADD += -lm -lmvec\n'
+ path.write_text(s)
+PY
+make -C lib/x11 -j"${OME_BUILD_JOBS:-8}"
+rm -f lib/libgmerlin.la
+make -C lib libgmerlin.la -j"${OME_BUILD_JOBS:-8}"
+make -C lib install-libLTLIBRARIES
+make -C include install
+make install-pkgconfigDATA install-pkgdataDATA
+make -C plugins/videofilters -j"${OME_BUILD_JOBS:-8}"
+make -C plugins/videofilters install

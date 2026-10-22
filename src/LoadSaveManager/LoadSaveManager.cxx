@@ -1,3 +1,4 @@
+#include <algorithm>
 /*  LoadSaveManager.cxx
  *
  *  Copyright (C) 2005 Richard Spindler <richard.spindler AT gmail.com>
@@ -32,6 +33,7 @@
 #include <tinyxml.h>
 
 #include "LoadSaveManager.H"
+#include "DocManager.H"
 #include "Prefs.H"
 #include "Timeline.H"
 #include "VideoTrack.H"
@@ -151,6 +153,24 @@ static string name_to_filename( string name )
 	free( buffer );
 	return filename;
 }
+void LoadSaveManager::openFile(string path)
+{
+  // Import a project into the original project library; preserve the source file.
+  TiXmlDocument document(path.c_str());
+  if(!document.LoadFile() || !document.FirstChildElement("open_movie_editor_project")) {
+    fl_alert("Cannot open Open Movie Editor project: %s",path.c_str());return;
+  }
+  save();g_timelineView->clear_selection();if(g_docManager)g_docManager->clear();
+  auto name=path.substr(path.find_last_of('/')+1);
+  if(name.size()>6 && name.substr(name.size()-6)==".vproj")name.resize(name.size()-6);
+  m_currentName=nodups(name);m_currentFilename=name_to_filename(m_currentName);
+  g_timeline->read(path);save();
+  m_projectChoice->add(m_currentName.c_str(),0,0,strdup(m_currentFilename.c_str()));
+  m_projectChoice->value(m_projectChoice->find_item(m_currentName.c_str()));
+  m_projectInput->label(m_currentName.c_str());
+  g_timelineView->scroll(0);g_timelineView->zoom(std::max(1.0,double(g_timelineView->w()-100)/std::max(5.0,double(g_timeline->durationTicks())/NLE_TIME_BASE)));
+  g_timelineView->adjustScrollbar();g_timelineView->redraw();
+}
 void LoadSaveManager::startup()
 {
 	m_currentName = g_preferences->lastProject();
@@ -208,6 +228,7 @@ void LoadSaveManager::save()
 }
 void LoadSaveManager::newProject()
 {
+    g_timelineView->clear_selection();if(g_docManager)g_docManager->clear();
 	g_timeline->write( m_video_projects + "/" + m_currentFilename, m_currentName );
 	m_currentName = "New Project";
 	m_currentFilename = name_to_filename( m_currentName );
@@ -273,6 +294,7 @@ void LoadSaveManager::name( string v )
 }
 void LoadSaveManager::load( string v )
 {
+    if(g_docManager)g_docManager->clear();
 	g_timelineView->clear_selection();
 	g_timeline->write( m_video_projects + "/" + m_currentFilename, m_currentName );
 	m_currentFilename = v;

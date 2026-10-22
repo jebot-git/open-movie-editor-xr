@@ -31,7 +31,7 @@ namespace nle
 
 GmerlinFactoryPlugin::GmerlinFactoryPlugin( bg_plugin_handle_t* plugin_handle )
 {
-	m_plugin_handle = plugin_handle;
+	m_plugin_handle = plugin_handle;m_ok=plugin_handle!=nullptr;
 	m_identifier = "effect:gmerlin:";
 	m_identifier += m_plugin_handle->info->name;
 }

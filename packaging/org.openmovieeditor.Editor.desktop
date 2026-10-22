@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Open Movie Editor
+Comment=Multitrack FLTK video editor with Intel QSV and SBS
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/openmovieeditor %f
+Icon=applications-multimedia
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+MimeType=application/x-openmovieeditor;
+StartupWMClass=org.openmovieeditor.Editor

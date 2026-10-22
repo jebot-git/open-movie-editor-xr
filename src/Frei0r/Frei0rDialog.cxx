@@ -100,7 +100,7 @@ static void mapButtonCallback( Fl_Widget* w, void* data ) {
 		map_menu[i].labeltype_ = FL_NORMAL_LABEL;
 		map_menu[i].labelfont_ = FL_HELVETICA;
 		map_menu[i].labelsize_ = 14;
-		map_menu[i].labelcolor_ = FL_BLACK;
+		map_menu[i].labelcolor_ = FL_FOREGROUND_COLOR;
 	}
 	map_menu[auttrk_count].text = 0;
 	Fl_Menu_Item* r = (Fl_Menu_Item*)map_menu->popup( w->x(), w->y() + w->h() );

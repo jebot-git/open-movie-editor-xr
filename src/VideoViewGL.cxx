@@ -30,6 +30,10 @@
 #include "render_helper.H"
 #include "int_float_scale.H"
 #include "LazyFrame.H"
+#include "media/Stereo.H"
+#include "VideoClip.H"
+#include "IVideoFile.H"
+#include <array>
 
 
 
@@ -43,44 +47,10 @@ namespace nle
 {
 
 
-struct texture_frame_cache {
-	void* p;
-	int dirty;
-};
-
-static struct texture_frame_cache tcache[10];
-	
-VideoViewGL* g_videoView = 0;
-
-void reset_cache()
-{
-	for ( int i = 0; i < 10; i++ ) {
-		tcache[i].p = 0;
-		tcache[i].dirty = 0;
-	}
-}
-
-VideoViewGL::VideoViewGL( int x, int y, int w, int h, const char *l )
-	: Fl_Gl_Window( x, y, w, h, l )
-{
-	g_videoView = this;
-	m_zoom = 0.0;
-	m_seekPosition = 0;
-	reset_cache();
-	m_once = true;
-}
-
-VideoViewGL::~VideoViewGL()
-{
-}
-
-static GLuint video_canvas[10];
-static int T_W = 2048;
-static int T_H = 2048;
-static float TEXTURE_WIDTH = 2048.0;
-static float TEXTURE_HEIGHT = 2048.0;
-//static unsigned char pulldown_frame[3 * 1024 * 1024];
-
+VideoViewGL* g_videoView=nullptr;
+VideoViewGL::VideoViewGL(int x,int y,int w,int h,const char *l):Fl_Gl_Window(x,y,w,h,l),m_seekPosition(0),m_zoom(0),m_once(true){g_videoView=this;}
+VideoViewGL::~VideoViewGL(){resetPreview();if(m_texture&&shown()){make_current();glDeleteTextures(1,&m_texture);}}
+void VideoViewGL::resetPreview(){m_stereo.reset();m_snapshot.clear();}
 void VideoViewGL::drawVideoBorder()
 {
 	//int w_ = 1024;
@@ -203,207 +173,77 @@ void VideoViewGL::drawVideoBorder()
 	*/
 }
 
-void VideoViewGL::pushFrameStack( LazyFrame** fs, bool move_cursor )
-{
- if ( move_cursor ) {MoveCursor(); }
- // TODO: Cursor not Moving when playback
- // When this redraws the TimelineView,
- // it causes redraws of the opengl window, which interferes with the playback,
- // because then swap_buffers is called after draw, and then pushFrameStack
- // _always_ draws into the second buffer which cases _severe_ screenflicker,
- // BAH 
-	
-	make_current();
-	if ( !valid() ) {
-		not_valid();
-	}
 
-	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-	glBindTexture( GL_TEXTURE_2D, video_canvas[0] );
-
-	if ( !fs[0] ) {
-		static unsigned char p[3 * 2048 * 2048] = { 0 };
-		glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, T_W, T_H, GL_RGB, GL_UNSIGNED_BYTE, p );
-		swap_buffers();
-		return;
-	}
-
-	drawFrameStack(fs);
-
-	swap_buffers();
-
+void VideoViewGL::not_valid(){
+  glMatrixMode(GL_PROJECTION);glLoadIdentity();
+  double a=m_zoom<0?10*m_zoom:5*m_zoom,b=10-a;
+  glViewport(0,0,pixel_w(),pixel_h());glOrtho(a,b,b,a,-20000,10000);
+  glMatrixMode(GL_MODELVIEW);glLoadIdentity();
+  glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glEnable(GL_TEXTURE_2D);
 }
-
-void VideoViewGL::pushFrame( LazyFrame* fs, bool move_cursor )
-{
-	LazyFrame* fstack[2] = {0};
-	fstack[0] = fs;
-	pushFrameStack( fstack, move_cursor );
+void VideoViewGL::pushFrameStack(LazyFrame **fs,bool move_cursor){
+  make_current();if(!valid())not_valid();glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+  drawFrameStack(fs);swap_buffers();
 }
-void VideoViewGL::not_valid()
-{
-	float glo1, glo2;
-	if ( m_zoom < 0.0 ) {
-		glo1 = 10.0 * m_zoom;
-		glo2 = 10.0 - 10.0 * m_zoom;
-	} else {
-		glo1 = 0.0 + m_zoom * 5.0; // -> 5.0
-		glo2 = 10.0 - m_zoom * 5.0; // -> 5.0
-	}
-	glLoadIdentity(); glViewport( 0, 0, w(), h() ); // glViewport( _x, _y, _w, _h );
-	glOrtho( glo1, glo2, glo2, glo1, -20000, 10000 ); glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-	glEnable (GL_TEXTURE_2D);
+void VideoViewGL::pushFrame(LazyFrame *f,bool move_cursor){LazyFrame *stack[]={f,nullptr};pushFrameStack(stack,move_cursor);}
+void VideoViewGL::draw(){
+  if(!valid())not_valid();
+  if(m_once){opengl_system_information<<"OpenGL: "<<glGetString(GL_RENDERER)<<" / "<<glGetString(GL_VERSION);m_once=false;}
+  if(g_playbackCore->active())return;
+  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+  if(m_seekPosition>=0){g_SEEKING=true;auto fs=g_timeline->getFrameStack(m_seekPosition);g_SEEKING=false;drawFrameStack(fs);}
+  g_PREVENT_OFFSCREEN_CRASH=false;
 }
-/*
- *  GL_NVX_ycrcb
- */
-void VideoViewGL::draw()
-{
-	if (g_backseek) { reset_cache(); g_backseek=false; }
-	static unsigned char p[3 * 2048 * 2048] = { 0 };
-	if (m_once) {
-		GLint max[2];
-		glGetIntegerv(GL_MAX_TEXTURE_SIZE, max);
-		glGenTextures( 10, video_canvas );
-		if ( max[0] < T_W ) {
-			T_W = max[0];
-			T_H = max[0];
-			TEXTURE_WIDTH = max[0];
-			TEXTURE_HEIGHT = max[0];
-		}
-		for ( int i = 0; i < 10; i++ ) {
-			glBindTexture (GL_TEXTURE_2D, video_canvas[i] );
-			glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
-			glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-			glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-			glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, T_W, T_H, 0, GL_RGB, GL_UNSIGNED_BYTE, p);
-		}
-		opengl_system_information.str( "" );
-		opengl_system_information << "OpenGL vendor string: " << ((const char*)glGetString(GL_VENDOR)) << endl;
-		opengl_system_information << "OpenGL renderer string: " << ((const char*)glGetString(GL_RENDERER)) << endl;
-		opengl_system_information << "OpenGL version string: " << ((const char*)glGetString(GL_VERSION)) << endl;
-		opengl_system_information << "GL_MAX_TEXTURE_SIZE = " << max[0] << endl;
-		m_once = false;
-	}
-	if ( g_playbackCore->active() ) { return; }
-	if ( !valid() ) {
-		not_valid();
-	}
-	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-	glBindTexture( GL_TEXTURE_2D, video_canvas[0] );
-	if ( m_seekPosition >= 0 ) {
-		g_SEEKING = true;
-		LazyFrame** fs = g_timeline->getFrameStack( m_seekPosition );
-		g_SEEKING = false;
-		if ( !fs[0] ) {
-			g_PREVENT_OFFSCREEN_CRASH = false;
-			return;
-		}
-
-
-		drawFrameStack( fs );
-	}
-	g_PREVENT_OFFSCREEN_CRASH = false;
-	drawVideoBorder();
+void VideoViewGL::seek(int64_t p){if(g_playbackCore->active())return;m_seekPosition=p;redraw();}
+void VideoViewGL::play(){if(g_playbackCore->active())return;m_seekPosition=-1;g_timeline->sort();g_playbackCore->play();}
+void VideoViewGL::stop(){g_playbackCore->stop();}
+void VideoViewGL::drawFrameStack(LazyFrame **fs){
+  int mode=g_timeline->stereoPreview;
+  bool stereo=g_timeline->stereoInput>0;
+  for(auto t=g_timeline->getTracks();t&&!stereo;t=t->next)
+    for(auto c=t->track->getClips();c&&!stereo;c=c->next)
+      if(auto clip=dynamic_cast<VideoClip*>(c->clip)){auto file=clip->file();int layout=file->stereoOverride()>=0?file->stereoOverride():g_timeline->stereoInput>=0?g_timeline->stereoInput:file->sourceStereoLayout();stereo=layout>0;}
+  bool pair=mode==1||(mode==0&&stereo);
+  int eyeWidth=720,eyeHeight=g_16_9?405:540;
+  auto upload=[&](LazyFrame *f,double x,double y,double width,double height,float u0=0,float u1=1){
+    auto format=f->format();auto rgba=f->RGBA();
+    if(!m_texture){glGenTextures(1,&m_texture);}
+    glBindTexture(GL_TEXTURE_2D,m_texture);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glPixelStorei(GL_UNPACK_ALIGNMENT,1);glPixelStorei(GL_UNPACK_ROW_LENGTH,rgba->strides[0]/4);
+    if(m_textureWidth!=format->frame_width||m_textureHeight!=format->frame_height){
+      m_textureWidth=format->frame_width;m_textureHeight=format->frame_height;
+      glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,m_textureWidth,m_textureHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+    }
+    glTexSubImage2D(GL_TEXTURE_2D,0,0,0,format->frame_width,format->frame_height,GL_RGBA,GL_UNSIGNED_BYTE,rgba->planes[0]);glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
+    glColor4f(1,1,1,f->alpha());glBegin(GL_QUADS);
+    glTexCoord2f(u0,0);glVertex2d(x,y);glTexCoord2f(u1,0);glVertex2d(x+width,y);
+    glTexCoord2f(u1,1);glVertex2d(x+width,y+height);glTexCoord2f(u0,1);glVertex2d(x,y+height);glEnd();
+  };
+  auto rectangle=[&](double aspect){
+    double factor=aspect/(double(w())/h());double width=factor>1?10:factor*10,height=factor>1?10/factor:10;
+    return std::array<double,4>{(10-width)/2,(10-height)/2,width,height};
+  };
+  if(mode!=5&&(stereo||mode>0)){
+    try{
+      auto snapshot=g_timeline->snapshot();
+      if(!m_stereo||snapshot!=m_snapshot||m_previewMode!=mode){m_stereo.reset(new StereoRender(g_timeline,eyeWidth*2,eyeHeight,1,1));m_snapshot=snapshot;m_previewMode=mode;}
+      auto frame=m_stereo->frame(m_seekPosition<0?g_timeline->m_playPosition:m_seekPosition);
+      auto r=rectangle(double(eyeWidth)/eyeHeight*(pair?2:1));
+      if(mode==4){
+        glColorMask(GL_TRUE,GL_FALSE,GL_FALSE,GL_TRUE);upload(frame,r[0],r[1],r[2],r[3],0,.5);
+        glColorMask(GL_FALSE,GL_TRUE,GL_TRUE,GL_TRUE);upload(frame,r[0],r[1],r[2],r[3],.5,1);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+      }else upload(frame,r[0],r[1],r[2],r[3],pair?0:mode==3?.5:0,pair?1:mode==3?1:.5);
+    }catch(const std::exception &e){std::cerr<<"Stereo preview: "<<e.what()<<std::endl;resetPreview();}
+    return;
+  }
+  resetPreview();
+  int count=0;while(fs&&fs[count])++count;
+  for(int i=count-1;i>=0;--i){
+    auto f=fs[i]->format();double par=f->pixel_height?double(f->pixel_width)/f->pixel_height:1;
+    auto r=rectangle(double(f->image_width)/f->image_height*par);upload(fs[i],r[0],r[1],r[2],r[3]);
+  }
+  drawVideoBorder();
 }
-
-void VideoViewGL::seek( int64_t position )
-{
-	if ( g_playbackCore->active() ) {
-		return;
-	}
-	m_seekPosition = position;
-	redraw();
-}
-
-void VideoViewGL::play()
-{
-	if ( g_playbackCore->active() ) {
-		return;
-	}
-	reset_cache();
-	m_seekPosition = -1;
-	g_timeline->sort();
-	g_playbackCore->play();
-}
-
-void VideoViewGL::stop()
-{
-	g_playbackCore->stop();
-}
-
-void VideoViewGL::drawFrameStack( LazyFrame** fs )
-{
-	int count = 0;	
-	for ( int i = 1; fs[i]; i++ ) {
-		count++;
-	}
-	//TODO: i < 10
-	for ( int i = count; i>=0; i-- ) {
-		glBindTexture( GL_TEXTURE_2D, video_canvas[i] );
-		if ( fs[i]->cacheable() ) {
-			if ( tcache[i].p == fs[i] && !tcache[i].dirty && !fs[i]->dirty() ) {
-				continue;
-			} else {
-				tcache[i].p = fs[i];
-				tcache[i].dirty = false;
-				fs[i]->dirty( false );
-			}
-		} else {
-			tcache[i].dirty = true;
-		}
-		if ( fs[i]->format()->pixelformat == GAVL_RGB_24 ) {
-			glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, fs[i]->format()->frame_width, fs[i]->format()->frame_height, GL_RGB, GL_UNSIGNED_BYTE, fs[i]->native()->planes[0] );
-		} else {
-			glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, fs[i]->format()->frame_width, fs[i]->format()->frame_height, GL_RGBA, GL_UNSIGNED_BYTE, fs[i]->RGBA()->planes[0] );
-		}
-	}
-	for ( int i = count; i>=0; i-- ) {
-		glBindTexture( GL_TEXTURE_2D, video_canvas[i] );
-		float gl_x, gl_y, gl_w, gl_h;
-		{
-			float f_v;// = ( (float)fs[i]->w / (float)fs[i]->h );
-			if ( g_16_9 ) {
-				f_v = ( 16.0 / 9.0 );
-			} else {
-				f_v = ( 4.0 / 3.0 );
-			}
-			float f_w = ( (float)w() / (float)h() );
-			float f_g = f_v / f_w;
-			if ( f_g > 1.0 ) {
-				gl_h = 10.0 / f_g;
-				gl_w = 10.0;
-			} else {
-				gl_h = 10.0;
-				gl_w = f_g * 10.0;
-			}
-			gl_x = ( 10.0 - gl_w ) / 2;
-			gl_y = ( 10.0 - gl_h ) / 2;
-
-		}
-	
-		float ww = ( fs[i]->format()->frame_width ) / TEXTURE_WIDTH;
-		float xx = 0;
-		float hh = fs[i]->format()->frame_height / TEXTURE_HEIGHT;
-		glColor4f( 1.0f, 1.0f, 1.0f, fs[i]->alpha() ); //Control Transparency
-		glBegin (GL_QUADS);
-			glTexCoord2f (  xx,      0.0 );
-			glVertex3f   (  gl_x,      gl_y, 0.0 );
-			glTexCoord2f (  xx + ww,  0.0 );  // (fs->w / 512.0)
-			glVertex3f   ( gl_x + gl_w,      gl_y, 0.0 );
-			glTexCoord2f (  xx + ww,  hh ); // (368.0 / 512.0) (240.0 / 512.0)
-			glVertex3f   ( gl_x + gl_w,     gl_y + gl_h, 0.0 );
-			glTexCoord2f (  xx,      hh ); // (fs->h / 512.0)
-			glVertex3f   (  gl_x,     gl_y + gl_h, 0.0 );
-		glEnd ();
-	}
-	drawVideoBorder();
-}
-
-
-} /* namespace nle */
+} // namespace nle

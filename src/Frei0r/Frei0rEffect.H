@@ -1,3 +1,4 @@
+#include <string>
 /* Frei0rEffect.H
  *
  *  Copyright (C) 2006 Richard Spindler <richard.spindler AT gmail.com>
@@ -23,6 +24,7 @@
 #include "IVideoEffect.H"
 #include "frei0r.h"
 #include <gavl/gavl.h>
+#include <vector>
 
 typedef f0r_instance_t (*f0r_construct_f)(unsigned int, unsigned int);
 typedef void (*f0r_destruct_f)(f0r_instance_t);
@@ -57,6 +59,8 @@ class Frei0rEffect : public IVideoEffect
 		void setFilterData( FilterData* );
 		const char* identifier();
 	private:
+        std::string m_identifier;
+        std::vector<uint32_t> m_packedInput,m_packedOutput;
 		f0r_instance_t m_instance;
 		unsigned char *m_frame;
 		gavl_video_frame_t* m_gavl_frame;

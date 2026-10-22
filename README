@@ -1,3 +1,21 @@
+de-xr: See README.XR.md for the original-editor FLTK 1.4.5 / QSV / SBS extension.
+
+Current de-xr build
+------------------
+The maintained fork uses the original multitrack editor with DomeD's patched
+FLTK 1.4.5, native menus, Intel QSV decoding/encoding and per-clip/project SBS
+settings. README.XR.md documents the current CMake release build, private legacy
+libraries, system/user installation, stereo workflow and hardware limits.
+
+Run openmovieeditor [project.vproj] for the editor, or openmovieeditor --help
+for render, project round-trip and subtitle/SMIL export commands. The source
+manual is doc/man/openmovieeditor.1; read it with:
+
+    man -l doc/man/openmovieeditor.1
+
+The following upstream notes describe the historical dependency/build setup;
+use README.XR.md for this fork's current build instead.
+
 The Open Movie Editor
 
 

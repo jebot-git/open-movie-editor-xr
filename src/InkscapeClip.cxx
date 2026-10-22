@@ -33,10 +33,25 @@
 #include <unistd.h>
 #include "VideoViewGL.H"
 #include <cassert>
+#include "appearance.h"
+#include <filesystem>
+#include <cerrno>
 #define BUFFER_LEN 1024
 namespace nle
 {
 
+static std::string svgCache(const std::string &source){
+  auto root=std::filesystem::path(getenv("XDG_CACHE_HOME")?getenv("XDG_CACHE_HOME"):(std::string(g_homefolder)+"/.cache"))/"openmovieeditor/svg";
+  auto path=root/std::filesystem::absolute(source).relative_path();path+=".png";
+  std::filesystem::create_directories(path.parent_path());return path.string();
+}
+static bool renderSvg(const std::string &source,const std::string &target){
+  std::vector<std::string> command={"inkscape","--export-type=png","--export-filename="+target,"--",source};
+  std::vector<char*> args;for(auto &s:command)args.push_back(s.data());args.push_back(nullptr);
+  pid_t child;int result=posix_spawnp(&child,"inkscape",nullptr,nullptr,args.data(),environ);
+  if(result)return false;int status;while(waitpid(child,&status,0)<0){if(errno!=EINTR)return false;}
+  return WIFEXITED(status)&&WEXITSTATUS(status)==0;
+}
 static void detect_svg_update_callback( void* data );
 
 InkscapeClip::InkscapeClip( Track* track, int64_t position, string filename, int64_t length, int id, ClipData* data )
@@ -48,30 +63,8 @@ InkscapeClip::InkscapeClip( Track* track, int64_t position, string filename, int
 	m_filename = filename;
 
 
-	char buffer[BUFFER_LEN];
-	findpath( filename.c_str(), buffer, BUFFER_LEN );
-	string cachepath = string(g_homefolder) + ("/.openme/cache" PREF_FILE_ADD)+ buffer;
-	string cachefile = string(g_homefolder) + ("/.openme/cache" PREF_FILE_ADD) + filename + ".png";
-
-
-
-	/*
-
-	Clip Create: copy svg-template into Projects Folder $HOME/Video\ Projects/random_file_name().svg
-	Clip Render: generate png from svg, using inkscape $HOME/Video\ Projects/random_file_name().png
-	Clip Edit: spawn inkscape, with copy from Projects Folder, and check
-	whether it was saved, when new version is detetected, run Clip Render
-
-	Extend the context Menü of the clip, for editing
-
-	*/
-	string svg_filename = filename;
-	string inkscape_command = "inkscape --export-png=\"";
-	inkscape_command += cachefile;
-	inkscape_command += "\" \"";
-	inkscape_command += svg_filename;
-	inkscape_command += "\"";
-	system( inkscape_command.c_str() );
+  auto cachefile=svgCache(filename);
+  if(!renderSvg(filename,cachefile))std::cerr<<"Cannot render SVG with Inkscape: "<<filename<<std::endl;
 
 	if ( length > 0 ) {
 		m_length = length;
@@ -81,7 +74,7 @@ InkscapeClip::InkscapeClip( Track* track, int64_t position, string filename, int
 	m_image_clip = new ImageClip( track, position, cachefile, length, id );
 
 	setEffects( data );
-	Fl::add_timeout(1.0, detect_svg_update_callback, this );
+	if(!track->render_mode())Fl::add_timeout(1.0, detect_svg_update_callback, this );
 }
 
 
@@ -97,16 +90,7 @@ int64_t InkscapeClip::length()
 
 void InkscapeClip::doAction( int index )
 {
-	string svg_filename = m_filename;
-	string inkscape_command = "inkscape \"";
-	inkscape_command += svg_filename;
-	inkscape_command += "\"";
-	//system( inkscape_command.c_str() );
-
-	const char* args[] = { "/bin/sh", "-c", inkscape_command.c_str(), (char *)0 };
-	if ( fork() == 0 ) {
-		execvp( "/bin/sh", (char* const*)args );
-	}
+  dx::spawn({"inkscape","--",m_filename});
 }
 static void detect_svg_update_callback( void* data ) {
 	InkscapeClip* ic = (InkscapeClip*)data;
@@ -115,29 +99,13 @@ static void detect_svg_update_callback( void* data ) {
 }
 void InkscapeClip::detectSvgUpdate()
 {
-	string svg_filename = m_filename;
-	char buffer[BUFFER_LEN];
-	findpath( m_filename.c_str(), buffer, BUFFER_LEN );
-	string cachepath = string(g_homefolder) + ("/.openme/cache" PREF_FILE_ADD)+ buffer;
-	string cachefile = string(g_homefolder) + ("/.openme/cache" PREF_FILE_ADD) + m_filename + ".png";
-	string png_filename = cachefile;
-	struct stat statbuf1;
-	struct stat statbuf2;
-	int r = stat( svg_filename.c_str(), &statbuf1 );
-	assert( r != -1 );
-	r = stat( png_filename.c_str(), &statbuf2 );
-	assert( r != -1 );
-	if ( statbuf1.st_mtime > statbuf2.st_mtime ) {
-		string inkscape_command = "inkscape --export-png=\"";
-		inkscape_command += png_filename;
-		inkscape_command += "\" \"";
-		inkscape_command += svg_filename;
-		inkscape_command += "\"";
-		system( inkscape_command.c_str() );
-		delete m_image_clip;
-		m_image_clip = new ImageClip( track(), position(), png_filename, length(), m_id );
-		g_videoView->redraw();
-	}
+  auto cachefile=svgCache(m_filename);
+  struct stat source{},cached{};
+  if(stat(m_filename.c_str(),&source)<0)return;
+  if(stat(cachefile.c_str(),&cached)<0||source.st_mtime>cached.st_mtime){
+    if(!renderSvg(m_filename,cachefile))return;
+    delete m_image_clip;m_image_clip=new ImageClip(track(),position(),cachefile,length(),m_id);g_videoView->redraw();
+  }
 }
 
 LazyFrame* InkscapeClip::getRawFrame( int64_t position, int64_t &position_in_file )

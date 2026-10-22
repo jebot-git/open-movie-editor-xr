@@ -1,3 +1,4 @@
+#include <algorithm>
 /*  AudioClip.cxx
  *
  *  Copyright (C) 2007 Richard Spindler <richard.spindler AT gmail.com>
@@ -31,6 +32,7 @@ AudioClip::AudioClip( Track *track, int64_t position, IAudioFile* af, int64_t tr
 	: FilterClip( track, position, id )
 {
 	m_mute = false;
+    m_lastSamplePosition=-1;
 	m_audioFile = af;
 	m_trimA = trimA;
 	m_trimB = trimB;
@@ -51,6 +53,7 @@ AudioClip::AudioClip( Track* track, int64_t position, IAudioFile* af, int id )
 	: FilterClip( track, position, id )
 {
 	m_mute = false;
+    m_lastSamplePosition=-1;
 	m_audioFile = af;
 	m_artist = 0;
 	m_audioReader = 0;
@@ -75,41 +78,19 @@ AudioClip::~AudioClip()
 		m_audioFile = 0;
 	}
 }
-int AudioClip::fillBufferRaw( float* output, unsigned long frames, int64_t position )
+int AudioClip::fillBufferRaw(float *output,unsigned long frames,int64_t position)
 {
-	if ( m_mute ) {
-		return 0;
-	}
-	int64_t frames_written = 0;
-	int64_t currentPosition = audioPosition();
-	int64_t aLength = audioLength();
-	int64_t trimA = audioTrimA();
-	int64_t frames64 = frames;
-	if ( !m_audioReader ) {
-		return 0;
-	}
-	if ( currentPosition + aLength < position ) { return 0; }
-	if ( currentPosition > position ) {
-		int64_t empty_frames = ( currentPosition - position )
-				< frames64 ? ( currentPosition - position ) : frames64;
-		for ( unsigned long i = 0; i < frames64 * 2; i++ ) {
-			//TODO eingentlich sollten nur empty_frames geschrieben werden
-			output[i] = 0.0;
-		}
-		frames_written += empty_frames;
-		if ( empty_frames == frames64 ) {
-			return frames_written;
-		}
-	}
-	if ( m_lastSamplePosition + frames64 != position ) {
-		m_audioReader->sampleseek( 0, position + frames_written - currentPosition + trimA );
-	}
-	m_lastSamplePosition = position;
-	return frames_written + m_audioReader->fillBuffer(
-			&output[frames_written], frames64 - frames_written
-			);
-
+  std::fill(output,output+frames*2,0.0f);
+  const int64_t start=audioPosition(),end=start+audioLength();
+  if(position>=end)return 0;
+  int64_t consumed=std::min<int64_t>(frames,end-position);
+  if(!m_mute&&m_audioReader){
+    int64_t first=std::max<int64_t>(position,start),count=std::min<int64_t>(position+frames,end)-first;
+    if(count>0){if(m_lastSamplePosition!=first)m_audioReader->sampleseek(0,first-start+audioTrimA());m_audioReader->fillBuffer(output+(first-position)*2,count);}
+  }
+  m_lastSamplePosition=position+consumed;return consumed;
 }
+
 int AudioClip::fillBuffer( float* output, unsigned long frames, int64_t position )
 {
 	int result = fillBufferRaw( output, frames, position );

@@ -1,140 +1,62 @@
-/*  AudioFileGmerlin.cxx
- *
- *  Copyright (C) 2008 Richard Spindler <richard.spindler AT gmail.com>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- */
-
-
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "AudioFileGmerlin.H"
-#include "ErrorDialog/IErrorHandler.H"
+#include "media/FFmpegInput.H"
+#include <algorithm>
+#include <cmath>
 #include <cstring>
-namespace nle
-{
-
-AudioFileGmerlin::AudioFileGmerlin( string filename )
-{
-	m_ok = false;
-	m_filename = filename;
-	m_frame1 = 0;
-	m_frame2 = 0;
-	m_converter = 0;
-	bgav_options_t* opt;
-	m_file = bgav_create();
-	opt = bgav_get_options( m_file );
-	bgav_options_set_sample_accurate( opt, 1 );
-	if( !bgav_open( m_file, filename.c_str() ) ) {
-		ERROR_DETAIL( "Could not open Audio file" );
-		return;
-	}
-	if( bgav_is_redirector( m_file ) ) {
-		ERROR_DETAIL( "Could not open Audio file" );
-		return;
-	}
-	if ( bgav_num_tracks( m_file ) == 0 ) {
-		ERROR_DETAIL( "This file has zero tracks" );
-		return;
-	}
-	//bgav_get_duration( m_file, 0 );
-	if ( bgav_num_audio_streams( m_file, 0 ) == 0 ) {
-		ERROR_DETAIL( "This file has zero audio streams" );
-		return;
-	}
-	if ( !bgav_can_seek_sample( m_file ) ) {
-		ERROR_DETAIL( "This file does not support sample accurate seeking" );
-		return;
-	}
-	if ( !bgav_select_track( m_file, 0 ) ) {
-		ERROR_DETAIL( "Selecting a track in this file failed" );
-		return;
-	}
-	if ( !bgav_set_audio_stream( m_file, 0, BGAV_STREAM_DECODE ) ) {
-		ERROR_DETAIL( "Setting an audio stream in this file failed" );
-		return;
-	}
-	if ( !bgav_start( m_file ) ) {
-		ERROR_DETAIL( "Starting the decoding failed" );
-		return;
-	}
-
-	gavl_audio_format_copy( &m_format, bgav_get_audio_format( m_file, 0 ) );
-
-	gavl_audio_format_copy( &m_float_format, &m_format );
-
-	m_samplerate = m_format.samplerate;
-	m_length = bgav_audio_duration( m_file, 0 );
-
-	m_float_format.num_channels = 2;
-	m_float_format.interleave_mode = GAVL_INTERLEAVE_2;
-	m_float_format.sample_format = GAVL_SAMPLE_FLOAT;
-	m_float_format.channel_locations[0] = GAVL_CHID_FRONT_LEFT;
-	m_float_format.channel_locations[1] = GAVL_CHID_FRONT_RIGHT;
-
-	m_samples_per_frame = 0;
-	m_converter = gavl_audio_converter_create();
-	gavl_audio_converter_init( m_converter, &m_format, &m_float_format );
-	m_frame2 = gavl_audio_frame_create( &m_float_format );
-	//Create converter that transforms audio to 2chan float interleaved,
-	//resampling happens outside.
-	m_ok = true;
+namespace nle {
+struct AudioFileGmerlin::State {
+  SwrContext *resample=nullptr;
+  std::vector<float> pending;
+  size_t offset=0;
+  int64_t target=0;
+  bool seeking=false,finished=false;
+  ~State(){swr_free(&resample);}
+};
+AudioFileGmerlin::AudioFileGmerlin(std::string filename)
+ : input(new FFmpegInput(filename,AVMEDIA_TYPE_AUDIO)),state(new State) {
+  m_ok=false;m_filename=filename;m_samplerate=48000;m_length=0;
+  if(!input->ok())return;
+  AVChannelLayout stereo=AV_CHANNEL_LAYOUT_STEREO;
+  int status=swr_alloc_set_opts2(&state->resample,&stereo,AV_SAMPLE_FMT_FLT,48000,
+      &input->codec->ch_layout,input->codec->sample_fmt,input->codec->sample_rate,0,nullptr);
+  if(status<0||swr_init(state->resample)<0)return;
+  m_length=std::llround(input->duration()*48000);m_ok=m_length>0;
 }
-AudioFileGmerlin::~AudioFileGmerlin()
-{
-	bgav_close( m_file );
-	if ( m_frame1 ) {
-		gavl_audio_frame_destroy( m_frame1 );
-	}
-	if ( m_frame2 ) {
-		gavl_audio_frame_destroy( m_frame2 );
-	}
-	m_frame1 = 0;
-	m_frame2 = 0;
+AudioFileGmerlin::~AudioFileGmerlin()=default;
+void AudioFileGmerlin::seek(int64_t sample) {
+  if(!m_ok)return;
+  state->target=std::max<int64_t>(0,sample);state->seeking=true;state->finished=false;
+  state->pending.clear();state->offset=0;
+  input->seek(double(state->target)/48000);
+  swr_close(state->resample);swr_init(state->resample);
 }
-void AudioFileGmerlin::seek( int64_t sample )
-{
-	bgav_seek_audio( m_file, 0, sample );
+int AudioFileGmerlin::fillBuffer(float *output,unsigned long frames) {
+  std::memset(output,0,frames*2*sizeof(float));if(!m_ok)return 0;
+  size_t written=0;
+  while(written<frames) {
+    size_t available=(state->pending.size()-state->offset)/2;
+    if(available) {
+      size_t n=std::min<size_t>(available,frames-written);
+      std::memcpy(output+written*2,state->pending.data()+state->offset,n*2*sizeof(float));
+      state->offset+=n*2;written+=n;continue;
+    }
+    if(state->finished)break;
+    bool got=input->next();
+    int capacity=got?swr_get_out_samples(state->resample,input->frame->nb_samples):swr_get_out_samples(state->resample,0);
+    state->pending.resize(std::max(32,capacity)*2);state->offset=0;
+    uint8_t *dest=reinterpret_cast<uint8_t*>(state->pending.data());
+    int count=swr_convert(state->resample,&dest,std::max(32,capacity),got?const_cast<const uint8_t**>(input->frame->extended_data):nullptr,got?input->frame->nb_samples:0);
+    if(count<0)break;
+    state->pending.resize(count*2);
+    if(state->seeking && got) {
+      int64_t begin=std::llround(std::max(0.,input->seconds())*48000);
+      int64_t skip=std::max<int64_t>(0,state->target-begin);
+      state->offset=std::min<int64_t>(count,skip)*2;
+      if(skip<count)state->seeking=false;
+    }
+    if(!got)state->finished=true;
+  }
+  return static_cast<int>(written);
 }
-void AudioFileGmerlin::reinit_frame( unsigned long frames )
-{
-	m_samples_per_frame = frames;
-	m_format.samples_per_frame = frames;
-	m_float_format.samples_per_frame = frames;
-	if ( m_frame1 ) {
-		gavl_audio_frame_destroy( m_frame1 );
-	}
-	m_frame1 = gavl_audio_frame_create( &m_format );
-	gavl_audio_frame_destroy( m_frame2 );
-	m_frame2 = gavl_audio_frame_create( &m_float_format );
 }
-int AudioFileGmerlin::fillBuffer( float* output, unsigned long frames )
-{
-	if ( frames != m_samples_per_frame ) {
-		reinit_frame( frames );
-	}
-
-	/*float* tmp = m_frame2->samples.f;
-	m_frame2->samples.f = output;*/
-
-	int ret = bgav_read_audio( m_file, m_frame1, 0, frames );
-	gavl_audio_convert( m_converter, m_frame1, m_frame2 );
-	memcpy( output, m_frame2->samples.f, sizeof(float) * frames * 2 );
-
-	/*m_frame2->samples.f = tmp;*/
-
-	return ret;
-}
-
-	
-} /* namespace nle */

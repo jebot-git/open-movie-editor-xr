@@ -1,0 +1,15 @@
+/build/
+/stage/
+/artifacts/*.ppm
+/artifacts/*.png
+**/__pycache__/
+
+/.deps/
+/build-original/
+/artifacts/
+
+/build-system/
+
+/stage-system/
+
+**/.deps/

@@ -120,11 +120,11 @@ int AudioVolumeFilter::fillBuffer( float* input_output, unsigned long frames, in
 	float envelope;
 	for ( int64_t i = 0; i < count; i++ ) {
 		envelope = getEnvelope( start_clip + i );
-		input_output[(i*2)] = input_output[(i*2)] * envelope;
-		input_output[(i*2) + 1] = input_output[(i*2) + 1] * envelope;
+		input_output[((i+start_output)*2)] = input_output[((i+start_output)*2)] * envelope;
+		input_output[((i+start_output)*2) + 1] = input_output[((i+start_output)*2) + 1] * envelope;
 	}
 	if ( count < 0 ) { count = 0; }
-	count = count * 2;
+	count = (count+start_output) * 2;
 	for ( int64_t i = (frames * 2) - 1; i >= count; i-- ) {
 		input_output[i] = 0.0;
 	}

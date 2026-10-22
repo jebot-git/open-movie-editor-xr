@@ -22,11 +22,13 @@
 
 #include <stdint.h>
 #include <gavl/gavl.h>
+#include <vector>
 
 #include "timeline/TimelineBase.H"
 #include "IAudioReader.H"
 #include "IVideoReader.H"
 
+class TiXmlDocument;
 namespace nle
 {
 
@@ -73,6 +75,10 @@ class Timeline : public TimelineBase, public IAudioReader, public IVideoReader
 		int getTrackId();
 		void clear();
 		int write( std::string filename, std::string name );
+        std::string snapshot();
+        int restore(const std::string &xml);
+        int64_t durationTicks() const;
+        int stereoInput=-1,stereoSwap=-1,stereoOutput=0,stereoPreview=0;
 		int read( std::string filename );
 		int write_smil( std::string filename, int track );
 		int write_srt( std::string filename, int track );
@@ -80,12 +86,15 @@ class Timeline : public TimelineBase, public IAudioReader, public IVideoReader
 		void render_mode( bool b ) { m_render_mode = b; }
 		playback_fps m_playback_fps;
 	private:
-		int64_t m_soundLength;
+		void writeDocument(TiXmlDocument &doc,const std::string &name);
+        int readDocument(TiXmlDocument &doc);
+        int64_t m_soundLength;
 		bool m_changed;
 		int m_trackId;
 		bool m_render_mode;
 
-		gavl_video_frame_t* m_blended_gavl_frame;
+		std::vector<LazyFrame*> m_frameStack;
+        gavl_video_frame_t* m_blended_gavl_frame;
 		LazyFrame*          m_blended_lazy_frame;
 		float buffer1[32000*2];
 		float buffer2[32000*2];

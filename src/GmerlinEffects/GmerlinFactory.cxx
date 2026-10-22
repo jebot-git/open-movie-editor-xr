@@ -37,9 +37,11 @@ GmerlinFactory::GmerlinFactory( IEffectMenu* menu )
 	for ( int i = 0; m_filters[i]; i++ ) {
 
 		const bg_plugin_info_t* plugin_info = bg_plugin_find_by_name ( m_plugin_registry, m_filters[i] );
-		bg_plugin_handle_t* plugin_handle = bg_plugin_load( m_plugin_registry, plugin_info );
+		if(!plugin_info || plugin_info->api!=BG_PLUGIN_API_GMERLIN)continue;
+        bg_plugin_handle_t* plugin_handle = bg_plugin_load( m_plugin_registry, plugin_info );
+        if(!plugin_handle)continue;
 		GmerlinFactoryPlugin* effect = new GmerlinFactoryPlugin( plugin_handle );
-		//TODO: Those are not deleted !!!
+		m_effects.push_back(effect);
 		menu->addEffect( effect );
 		g_mainFilterFactory->add( effect->identifier(), effect );
 		g_ui->special_clips->add( effect->name(), PL_VIDEO_EFFECT, effect->identifier() );
@@ -51,6 +53,7 @@ GmerlinFactory::GmerlinFactory( IEffectMenu* menu )
 
 GmerlinFactory::~GmerlinFactory()
 {
+	for(auto effect:m_effects)delete effect;
 	bg_plugin_registry_free_plugins( m_filters );
 	bg_plugin_registry_destroy( m_plugin_registry );
 	bg_cfg_registry_destroy( m_cfg_registry );

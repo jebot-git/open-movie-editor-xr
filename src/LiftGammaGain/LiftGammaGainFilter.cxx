@@ -62,16 +62,17 @@ LazyFrame* LiftGammaGainFilter::getFrame( LazyFrame* frame, int64_t position )
 	if ( m_bypass ) {
 		return frame;
 	}
-	unsigned int len = m_w * m_h;
-	unsigned char* dst = m_frame;
-	unsigned char* src = frame->RGBA()->planes[0];
-	while (len--)
-	{
-		*dst++ = m_red[*src++];
-		*dst++ = m_green[*src++];
-		*dst++ = m_blue[*src++];
-		*dst++ = *src++; // copy alpha
-	}
+    auto input=frame->RGBA();
+    for(int y=0;y<m_h;++y){
+      auto src=input->planes[0]+y*input->strides[0];
+      auto dst=m_frame+y*m_gavl_frame->strides[0];
+      for(int x=0;x<m_w;++x){
+        dst[0]=m_red[src[0]];
+        dst[1]=m_green[src[1]];
+        dst[2]=m_blue[src[2]];
+        dst[3]=src[3];dst+=4;src+=4;
+      }
+    }
 	return m_lazy_frame;
 }
 const char* LiftGammaGainFilter::name()

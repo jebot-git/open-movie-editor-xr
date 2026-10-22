@@ -21,6 +21,7 @@
 #define _MAIN_FILTER_FACTORY_H_
 
 #include <string>
+#include <map>
 using namespace std;
 
 namespace nle
@@ -47,7 +48,8 @@ class MainFilterFactory
 		void addAll( IEffectMenu* menu );
 		FilterFactory* get( const char* identifier );
 	private:
-		filter_factory_node* m_factories;	
+		filter_factory_node* m_factories;
+        std::map<std::string,FilterFactory*> m_missing;
 };
 	
 } /* namespace nle */

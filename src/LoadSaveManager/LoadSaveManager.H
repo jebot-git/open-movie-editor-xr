@@ -36,6 +36,7 @@ class LoadSaveManager
 		LoadSaveManager( Fl_Choice* projectChoice, Fl_Button* projectInput );
 		~LoadSaveManager();
 		void startup();
+		void openFile(string path);
 		void shutdown();
 		void newProject();
 		void saveAs();

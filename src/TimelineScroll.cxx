@@ -32,7 +32,7 @@ TimelineScroll::~TimelineScroll() {}
 void TimelineScroll::resize( int x, int y, int w, int h )
 {
 	child(0)->size( w, h );
-	position( 0, g_v_scrollbar->value() );
+	scroll_to(0,g_v_scrollbar?g_v_scrollbar->value():0);
 	Fl_Scroll::resize( x, y, w, h );
 }
 

@@ -1,3 +1,4 @@
+#include "EditorIntegration.H"
 /*  MediaBrowser.cxx
  *
  *  Copyright (C) 2006 Richard Spindler <richard.spindler AT gmail.com>
@@ -143,7 +144,7 @@ void MediaBrowser::item_draw( void* p, int x, int y, int w, int h ) const
 	} else {
 		fl_draw_box( FL_FLAT_BOX, x, y, w, h, FL_BACKGROUND2_COLOR );
 	}
-	fl_font( FL_HELVETICA, 14 );
+	fl_font(nle::editor_font(),nle::editor_font_size(14));
 	fl_color( FL_FOREGROUND_COLOR );
 	fl_draw( f->value.c_str(), x + 53, y + 15 );
 
@@ -180,7 +181,7 @@ void MediaBrowser::item_draw( void* p, int x, int y, int w, int h ) const
 	}
 	if ( f->rgb ) {
 		fl_draw_image( f->rgb, x, y, VIDEO_THUMBNAIL_WIDTH, VIDEO_THUMBNAIL_HEIGHT );
-		fl_font( FL_HELVETICA, 12 );
+		fl_font(nle::editor_font(),nle::editor_font_size(12));
 		fl_color( FL_FOREGROUND_COLOR );
 		char buffer[255];
 		snprintf( buffer, 255, "%dx%d", f->w, f->h );

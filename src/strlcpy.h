@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-size_t strlcpy(char *dst, const char *src, size_t dstsize);
+size_t ome_strlcpy(char *dst, const char *src, size_t dstsize);
 
 #ifdef __cplusplus
 }

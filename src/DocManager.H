@@ -36,6 +36,7 @@ class DocManager
 		DocManager();
 		~DocManager();
 		void undo();
+        void clear();
 		void redo();
 		void submit( Command* cmd );
 		bool canUndo();

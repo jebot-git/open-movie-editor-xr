@@ -27,6 +27,7 @@
 #include "SrcNode.H"
 #include "timebase.H"
 #include <iostream>
+#include <cstring>
 #include "BezierCurveNode.H"
 #include "helper.H"
 #include "NodeFilterPreviewFactoryPlugin.H"
@@ -238,7 +239,8 @@ LazyFrame* NodeFilter::getFrame( LazyFrame* frame, int64_t position )
 	if ( m_bypass ) {
 		return frame;
 	}
-	m_frame_cache = (uint32_t*)frame->RGBA()->planes[0];
+	auto input=frame->RGBA();m_frame_cache=reinterpret_cast<uint32_t*>(input->planes[0]);
+    if(input->strides[0]!=m_w*4){m_packedInput.resize(size_t(m_w)*m_h);for(int y=0;y<m_h;++y)std::memcpy(m_packedInput.data()+size_t(y)*m_w,input->planes[0]+y*input->strides[0],m_w*4);m_frame_cache=m_packedInput.data();}
 	m_gavl_frame->planes[0] = (unsigned char*)m_sink_node->getFrame( 0, position / (double)NLE_TIME_BASE );
 
 	for ( filters* filter_node = m_filters; filter_node; filter_node = filter_node->next ) {

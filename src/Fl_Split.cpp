@@ -38,7 +38,7 @@
 
 void Fl_Split::position(int oix, int oiy, int newx, int newy) {
   Fl_Widget*const* a = array();
-  short* p = sizes();
+  auto* p = sizes();
   p += 8; // skip group & resizable's saved size
   for (int i=children(); i--; p += 4) {
     Fl_Widget* o = *a++;
@@ -88,7 +88,7 @@ void Fl_Split :: resize(int X,int Y,int W,int H) {
 	  return;
   }
 
-  short* p = sizes();
+  auto* p = sizes();
   // resize this (skip the Fl_Group resize):
   Fl_Widget::resize(X,Y,W,H);
 
@@ -155,8 +155,8 @@ int Fl_Split::handle(int event)
 		  int oldx = 0;
 		  int oldy = 0;
 		  Fl_Widget*const* a = array();
-		  short* q = sizes();
-		  short* p = q+8;
+		  auto* q = sizes();
+		  auto* p = q+8;
 		  //printf("cursor(%d,%d)\n", mx,my);
 		  for (int i=children(); i--; p += 4) {
 			  Fl_Widget* o = *a++;

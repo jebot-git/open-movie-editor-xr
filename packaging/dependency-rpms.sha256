@@ -1,0 +1,6 @@
+3c43cc017021e9f39d4a3d3fcb3ab07bb26347d3f48e8367fd5f7fd883ece82a  .deps/rpms/gavl-devel-1.4.0-40.fc44.x86_64.rpm
+1fad8b71a3c0bdbc1717f3eee32499461fdbfdc43b767cc18023c922013e6da4  .deps/rpms/libquicktime-1.2.4^20240202git2213b76-3.fc44.x86_64.rpm
+39952965937568436f112a3fb3ac98ecfbbd41cb2f9d3c97db67215493e4fd8a  .deps/rpms/libquicktime-devel-1.2.4^20240202git2213b76-3.fc44.x86_64.rpm
+e3f54a0f53d46f86afaca5058ae9bf235c32fd111587f515800007b7bb650c6c  .deps/rpms/portaudio-devel-19.7.0-3.fc44.x86_64.rpm
+13ae37150817d9be27b6728866618d01ad0dcd2ffd23b8823ec037a19f7ba409  .deps/rpms/libdv-1.0.0-46.fc44.x86_64.rpm
+42def0b4a940f07b4edd124a40fda67c6f8a9f5fd91f972770a1cda41669edee  .deps/rpms/schroedinger-1.0.11-35.fc44.x86_64.rpm

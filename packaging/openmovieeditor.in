@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+ome_private='@CMAKE_INSTALL_FULL_LIBEXECDIR@/openmovieeditor'
+export LD_LIBRARY_PATH="$ome_private/lib:@OME_FLTK_LIBDIR@${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBQUICKTIME_PLUGIN_DIR="$ome_private/lib/libquicktime"
+export GMERLIN_PLUGIN_PATH="$ome_private/lib/gmerlin/plugins"
+exec "$ome_private/openmovieeditor" "$@"

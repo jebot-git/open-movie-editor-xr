@@ -50,7 +50,7 @@ int TrackBase::fillBuffer( float* output, unsigned long frames, int64_t position
 				 frames - written, position + written
 				);
 		written += inc;
-		incBuffer += inc;
+		incBuffer += inc * 2;
 		if ( written < frames ) {
 			m_current = m_current->next;
 		}

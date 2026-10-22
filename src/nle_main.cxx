@@ -18,6 +18,12 @@
  */
 
 #include "config.h"
+#include "appearance.h"
+#include "desktop-menu.h"
+#include "EditorIntegration.H"
+#include "media/EncoderRegistry.H"
+#include "media/EngineCLI.H"
+#include <memory>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -85,6 +91,20 @@ static void print_file_if_exists( const char* filename )
 
 int main( int argc, char** argv )
 {
+    if(argc==2 && std::string(argv[1])=="--version"){printf("Open Movie Editor %s\n",VERSION);return 0;}
+    if(argc==2 && std::string(argv[1])=="--help"){
+      puts("Open Movie Editor: original multitrack editor with QSV and SBS\n"
+           "  openmovieeditor [project.vproj]\n"
+           "  openmovieeditor --render PROJECT OUTPUT [--encoder av1_qsv|h264_qsv|hevc_qsv|vp9_qsv|libx264]\n"
+           "    [--audio aac] [--size 1280x720] [--fps 30000/1001] [--sbs mono|full|half]\n"
+           "    [--quality 23] [--bitrate 8000000] [--device /dev/dri/renderD128]\n"
+           "  openmovieeditor --roundtrip PROJECT COPY.vproj\n"
+           "  openmovieeditor --export-srt PROJECT OUTPUT.srt [--track 0]\n"
+           "  openmovieeditor --export-smil PROJECT OUTPUT.smil [--track 0]\n"
+           "Rendering and title export require a display (Xvfb is supported).");return 0;
+    }
+    std::string smoke;
+    for(int i=1;i+1<argc;++i)if(std::string(argv[i])=="--smoke-test")smoke=argv[++i];
 	cout << "When submitting a BUG report, or SUPPORT request, please include the following information:" << endl;
 	cout << "(See Help->About... too)" << endl;
 	cout << "----8<-----------------------" << endl;
@@ -131,9 +151,8 @@ int main( int argc, char** argv )
 
 
 	nle::MainFilterFactory fFactory;
-	nle::Frei0rFactory effectFactory( nui.m_effectMenu );
-
 	nle::GmerlinFactory gmerlinFactory( nui.m_effectMenu );
+    nle::Frei0rFactory effectFactory( nui.m_effectMenu );
 	
 	nle::ColorCurveFactory colorCurveFactory;
 	nui.m_effectMenu->addEffect( &colorCurveFactory );
@@ -158,8 +177,10 @@ int main( int argc, char** argv )
 	nui.m_effectMenu->addEffect( &audioVolumeFilterFactory );
 	fFactory.add( "filter:builtin:VolumeAutomations", &audioVolumeFilterFactory );
 	
-	nle::IPlaybackCore* playbackCore = new nle::JackPlaybackCore( nle::g_timeline, nle::g_timeline, nle::g_videoView );
-	if ( !playbackCore->ok() ) {
+	nle::IPlaybackCore* playbackCore = nullptr;
+    if(!getenv("OME_AUDIO_BACKEND") || std::string(getenv("OME_AUDIO_BACKEND"))!="portaudio")
+        playbackCore = new nle::JackPlaybackCore( nle::g_timeline, nle::g_timeline, nle::g_videoView );
+	if ( !playbackCore || !playbackCore->ok() ) {
 		delete playbackCore;
 		playbackCore = new nle::PortAudio19PlaybackCore( nle::g_timeline, nle::g_timeline, nle::g_videoView );
 		nui.portaudio();
@@ -179,8 +200,19 @@ int main( int argc, char** argv )
 	
 	nle::g_audio_codec_info = lqt_query_registry( 1, 0, 1, 0 );
 	nle::g_video_codec_info = lqt_query_registry( 0, 1, 1, 0 );
+    nle::extend_encoder_registry();
 
-	nui.show( argc, argv );
+	if(dx::dome()) {dx::init();dx::style(nui.mainWindow);}
+    nui.mainWindow->xclass("org.openmovieeditor.Editor");
+    Fl_Menu_Bar *nativeMenu=nullptr;
+    for(int i=0;i<nui.mainWindow->children();++i)if(auto m=dynamic_cast<Fl_Menu_Bar*>(nui.mainWindow->child(i))){nativeMenu=m;break;}
+    std::unique_ptr<DesktopMenu> desktopMenu;
+    if(nativeMenu)desktopMenu.reset(new DesktopMenu(*nui.mainWindow,*nativeMenu));
+    nle::install_editor_integration(nui);
+    nui.show(1,argv);
+    int commandResult=nle::engine_command(argc,argv);
+    if(commandResult>=0){nle::shutdown_editor_integration();timeline.clear();delete playbackCore;return commandResult;}
+    if(!smoke.empty()){Fl::check();bool good=dx::screenshot(*nui.mainWindow,smoke.c_str());nle::shutdown_editor_integration();timeline.clear();delete playbackCore;return good?0:1;}
 /*	int x, y, w, h;
 	preferences.getWindowPosition( x, y, w, h );
 	if ( x > 0 && y > 0 && w > 0 && h > 0 ) {
@@ -193,12 +225,15 @@ int main( int argc, char** argv )
 	nui.mainWindow->init_sizes();
 
 	lsm.startup();
+    if(argc==2 && argv[1][0]!='-')lsm.openFile(argv[1]);
 	int r = Fl::run();
 	fltk_save_layout( window_prefs, nui.mainWindow );
 	
 
 //	preferences.setWindowPosition( nui.mainWindow->x(), nui.mainWindow->y(), nui.mainWindow->w(), nui.mainWindow->h() );
 	//lsm.shutdown();
-	delete playbackCore;
+	nle::shutdown_editor_integration();
+    timeline.clear();
+    delete playbackCore;
 	return r;
 }

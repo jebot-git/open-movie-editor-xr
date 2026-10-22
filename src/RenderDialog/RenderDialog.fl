@@ -11,7 +11,9 @@ decl {\#include "EncodingPreset.H"} {global
 decl {\#include "helper.H"} {global
 } 
 
-decl {\#include <tinyxml.h>} {} 
+decl {\#include <tinyxml.h>} {}
+decl {\#include "media/EncoderRegistry.H"} {global}
+decl {\#include "Timeline.H"} {global}
 
 class RenderDialog {open
 } {
@@ -19,7 +21,7 @@ class RenderDialog {open
   } {
     Fl_Window dialog_window {
       label Export open
-      xywh {623 246 560 405} type Double resizable
+      xywh {623 246 560 475} type Double resizable
       code0 {\#include "VideoWriterQT.H"}
       code1 {\#include <colormodels.h>} modal visible
     } {
@@ -37,6 +39,12 @@ class RenderDialog {open
         xywh {375 55 75 25}
         code0 {\#include <stdlib.h>}
         code1 {\#include <FL/Fl_File_Chooser.H>}
+      }
+      Fl_Choice stereo_layout {
+        label {Stereo output}
+        xywh {165 85 285 25}
+        code0 {stereo_layout->add("2D (left eye for SBS)|Full SBS|Half SBS");}
+        code1 {stereo_layout->value(nle::g_timeline?nle::g_timeline->stereoOutput:0);}
       }
       Fl_Return_Button {} {
         label Encode

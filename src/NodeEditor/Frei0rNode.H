@@ -1,3 +1,4 @@
+#include <string>
 #ifndef _FREIOR_NODE_H_
 #define _FREIOR_NODE_H_
 
@@ -32,6 +33,7 @@ class Frei0rNode : public INode
 		void writeXML( TiXmlElement* xml_node );
 		const char* identifier();
 	private:
+        std::string m_identifier;
 		f0r_instance_t m_instance;
 		f0r_construct_f f0r_construct;
 		f0r_destruct_f f0r_destruct;

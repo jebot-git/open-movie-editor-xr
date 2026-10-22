@@ -31,6 +31,11 @@ class IVideoFileWriter
 {
 	public:
 		virtual ~IVideoFileWriter() {}
+        virtual bool ok() const {return true;}
+        virtual const char* error() const {return "";}
+        virtual bool finish() {return true;}
+        virtual void cancel() {}
+        virtual int stereoLayout() const {return 0;}
 		virtual void encodeVideoFrame( LazyFrame* frame ) = 0;
 		virtual void encodeAudioFrame( float* buffer, int frames ) = 0;
 		virtual video_format* format() = 0;

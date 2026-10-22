@@ -1,3 +1,4 @@
+#include "EditorIntegration.H"
 /*  TimelineView.cxx
  *
  *  Copyright (C) 2005-2008 Richard Spindler <richard.spindler AT gmail.com>
@@ -206,13 +207,13 @@ int TimelineView::handle( int event )
 			cl = get_clip( _x, _y );
 			if ( cl && ( _x < get_screen_position( cl->position(), cl->track()->stretchFactor() ) + 8 ) ) {
 				if ( current_cursor != FL_CURSOR_WE ) {
-					flmm_cursor( window(), &Flmm_Cursor_Shape(clip_a_cursor_crsr) );
+					window()->cursor(FL_CURSOR_WE);
 					//window()->cursor( FL_CURSOR_WE, fl_rgb_color(254,254,254), fl_rgb_color(1,1,1) );
 					current_cursor = FL_CURSOR_WE;
 				}
 			} else if ( cl &&  ( _x > get_screen_position( cl->position() + (cl->length()+1), cl->track()->stretchFactor() ) - 8 ) ) {
 				if ( current_cursor != FL_CURSOR_NE ) {
-					flmm_cursor( window(), &Flmm_Cursor_Shape(clip_b_cursor_crsr) );
+					window()->cursor(FL_CURSOR_WE);
 					current_cursor = FL_CURSOR_NE;
 				}
 			} else {
@@ -335,7 +336,7 @@ int TimelineView::handle( int event )
 						action_menu[i].labeltype_ = FL_NORMAL_LABEL;
 						action_menu[i].labelfont_ = FL_HELVETICA;
 						action_menu[i].labelsize_ = 14;
-						action_menu[i].labelcolor_ = FL_BLACK;
+						action_menu[i].labelcolor_ = FL_FOREGROUND_COLOR;
 					}
 					action_menu[cl->getActionCount()].text = 0;
 
@@ -415,6 +416,7 @@ int TimelineView::handle( int event )
 			}
 		case FL_SHORTCUT: //patch by raaf from OME Forums
 			{
+                if(Fl::event_state()&(FL_CTRL|FL_ALT|FL_META))return Fl_Widget::handle(event);
 				//Take m_playback_fps into account here!!
 				int key = Fl::event_key();
 				int64_t framelen = single_frame_length( g_timeline->m_playback_fps );
@@ -484,8 +486,8 @@ void TimelineView::draw()
 		
 	//     - Draw Button
 		fl_draw_box( FL_UP_BOX, x() + TRACK_SPACING, y_coord, 64, track->h() + 1, FL_BACKGROUND_COLOR );
-		fl_color( FL_BLACK );
-		fl_font( FL_HELVETICA, 11 );
+		fl_color( FL_FOREGROUND_COLOR );
+		fl_font(nle::editor_font(),nle::editor_font_size(11));
 		if ( USING_AUDIO ) {
 			fl_draw( track->name().c_str(), x() + TRACK_SPACING + 23, y_coord + 18);
 			fl_draw_pixmap( audio_xpm, x() + TRACK_SPACING + 3, y_coord + 5 );
@@ -571,7 +573,7 @@ void TimelineView::draw()
 			int scr_clip_w = (int)( (clip->length()+1) * GetZoom() / track->stretchFactor() );
 			for ( int k = 0; k < 2; k++ ) {
 				if ( !k ) {
-					fl_color( FL_BLACK );
+					fl_color( FL_FOREGROUND_COLOR );
 					fl_begin_polygon();
 				} else {
 					fl_color( FL_DARK2 );
@@ -844,6 +846,17 @@ void TimelineView::clear_selection()
 	}
 	updateEffectDisplay();
 	setSelectionButtons();
+}
+VideoClip* TimelineView::selectedVideoClip()
+{
+  return m_selectedClips && !m_selectedClips->next ? dynamic_cast<VideoClip*>(m_selectedClips->clip) : nullptr;
+}
+void TimelineView::selectAll()
+{
+  clear_selection();
+  for(auto t=g_timeline->getTracks();t;t=t->next)
+    for(auto c=t->track->getClips();c;c=c->next)toggle_selection(c->clip);
+  setSelectionButtons();redraw();
 }
 void TimelineView::select_clips( int _x1, int _y1, int _x2, int _y2 )
 {

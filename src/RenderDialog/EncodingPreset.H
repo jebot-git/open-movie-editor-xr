@@ -117,12 +117,18 @@ class EncodingPreset
 		void construct_CodecParameters( lqt_codec_info_t** audio, lqt_codec_info_t** video );
 		void construct_CodecParameters( lqt_codec_info_t** audio, lqt_codec_info_t** video, EncodingPreset* copy );
 		/* ----copied from CodecParameters----*/
-		int bitrate();
+		int videoInt(const char *key,int fallback) const;
+        int audioInt(const char *key,int fallback) const;
+        std::string videoString(const char *key,const char *fallback) const;
+        int stereoLayout() const {return m_stereoLayout;}
+        void stereoLayout(int layout){m_stereoLayout=layout;}
+        int bitrate();
 		int audiobitrate();
 		void bitrate( int rate );
 		void audiobitrate( int rate );
 	private:
 		video_format m_format;
+        int m_stereoLayout=0;
 		lqt_codec_info_t** lqt_audio_codecs;
 		lqt_codec_info_t** lqt_video_codecs;
 		

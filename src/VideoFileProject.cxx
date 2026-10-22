@@ -32,10 +32,11 @@ VideoFileProject::VideoFileProject( std::string filename )
 	g_timeline = x;
 	m_filename = filename;
 	m_ok = false;
-	m_timeline->read( filename );
 	m_timeline->render_mode( true );
+    m_timeline->read( filename );
+    m_width=720;m_height=576;
 
-	gavl_video_format_t format;
+	gavl_video_format_t format{};
 	format.frame_width  = 720;
 	format.frame_height = 576;
 	format.image_width  = 720;
@@ -61,7 +62,7 @@ bool VideoFileProject::ok()
 }
 int64_t VideoFileProject::length()
 {
-	return m_timeline->length() * NLE_TIME_BASE;
+	return m_timeline->durationTicks();
 }
 LazyFrame* VideoFileProject::read()
 {

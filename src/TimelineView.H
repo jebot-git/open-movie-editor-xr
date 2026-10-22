@@ -44,6 +44,7 @@ class DragHandler;
 class FilterFactory;
 class PasteSelectionCommand;
 class TitleClip;
+class VideoClip;
 class FilterBase;
 	
 class TimelineView : public Fl_Widget
@@ -64,6 +65,8 @@ class TimelineView : public Fl_Widget
 		void trim_clip( Clip* clip, int _x, bool trimRight );
 		void split_clip( Clip* clip, int _x );
 		void clear_selection();
+		void selectAll();
+		VideoClip* selectedVideoClip();
 		void select_clips( int _x1, int _y1, int _x2, int _y2 );
 		void select_all_after_cursor();
 		void toggle_selection( Clip* clip );
@@ -71,7 +74,7 @@ class TimelineView : public Fl_Widget
 		void move_cursor_by(int64_t change);
 		void move_cursor( int64_t position );
 		void stylus( long stylus_pos );
-		long stylus();
+		long stylus() { return m_stylusPosition; }
 		void draw_cursor();
 		void zoom( float zoom );
 		int64_t get_real_position( int p, float stretchFactor = NLE_TIME_BASE );

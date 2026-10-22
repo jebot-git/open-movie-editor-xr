@@ -30,6 +30,8 @@ NodeFilterFrei0rFactory::NodeFilterFrei0rFactory()
 	enumerate( home + FREI0R_DIR_3 );
 	enumerate( FREI0R_DIR_2 );
 	enumerate( FREI0R_DIR_1 );
+    enumerate( "/usr/lib64/frei0r-1/" );
+    enumerate( "/usr/local/lib64/frei0r-1/" );
 	g_node_filter_frei0r_factory = this;
 }
 

@@ -221,8 +221,8 @@ void Frei0rNode::writeXML( TiXmlElement* xml_node )
 }
 const char* Frei0rNode::identifier()
 {
-	std::string identifierstring = "effect:frei0r:";
-	identifierstring += m_info->name;
-	return identifierstring.c_str();
+	m_identifier = "effect:frei0r:";
+	m_identifier += m_info->name;
+	return m_identifier.c_str();
 }
 

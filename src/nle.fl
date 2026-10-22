@@ -2,7 +2,8 @@
 version 1.0109 
 header_name {.h} 
 code_name {.cxx}
-decl {\#include <tinyxml.h>} {} 
+decl {\#include <tinyxml.h>} {}
+decl {\#include "EditorIntegration.H"} {global}
 
 decl {\#include <lqt.h>} {} 
 
@@ -14,7 +15,7 @@ decl {\#include <lqt_version.h>} {}
 decl {\#include <gavl/gavl_version.h>} {global
 } 
 
-decl {\#include <gmerlin/bgav_version.h>} {global
+decl {\#define BGAV_VERSION "FFmpeg 8 / Intel QSV"} {global
 } 
 
 decl {\#include <gmerlin/bg_version.h>} {global
@@ -48,13 +49,33 @@ if ( Fl::event()==FL_CLOSE ) {
         xywh {0 0 530 25}
       } {
         Submenu {} {
-          label {&Project} open
+          label {&File} open
           xywh {0 0 100 20}
         } {
           MenuItem {} {
             label {New Project}
             callback {nle::g_loadSaveManager->newProject();}
-            xywh {0 0 100 20}
+            xywh {0 0 100 20} shortcut 0x4006e
+          }
+          MenuItem {} {
+            label {Open...}
+            callback {nle::editor_menu(o,(void*)1);}
+            xywh {0 0 100 20} shortcut 0x4006f
+          }
+          MenuItem {} {
+            label {Save}
+            callback {nle::editor_menu(o,(void*)2);}
+            xywh {0 0 100 20} shortcut 0x40073
+          }
+          MenuItem {} {
+            label {Import media...}
+            callback {nle::editor_menu(o,(void*)22);}
+            xywh {0 0 100 20} shortcut 0x40069
+          }
+          MenuItem {} {
+            label {Close}
+            callback {nle::editor_menu(o,(void*)4);}
+            xywh {0 0 100 20} shortcut 0x40077
           }
           MenuItem {} {
             label {Save as...}
@@ -63,7 +84,9 @@ if ( Fl::event()==FL_CLOSE ) {
           }
           MenuItem {} {
             label {Render...}
-            callback {Fl_Group::current( mainWindow );
+            callback {
+try {
+  Fl_Group::current( mainWindow );
 
 
 RenderDialog dlg;
@@ -79,7 +102,8 @@ if ( dlg.go && strcmp( "", dlg.export_filename->value() ) != 0 ) {
 	ProgressDialog pDlg( "Rendering Project" );
 	//render_frame_size* fs = (render_frame_size*)dlg.frameSize();
 	//render_fps_chunks* fps = (render_fps_chunks*)dlg.frameRate();
-	nle::Renderer ren( dlg.getFileWriter() );
+	m_videoView->stop();
+    nle::Renderer ren( dlg.getFileWriter() );
 	//nle::Renderer ren( dlg.export_filename->value(), fs, fps, 48000, &cp );
 
 	/* stop playback before starting to render... */
@@ -90,7 +114,8 @@ if ( dlg.go && strcmp( "", dlg.export_filename->value() ) != 0 ) {
 	forwardButton->activate();
 	backButton->activate();
 
-	if ( ren.ok() ) {
+	if(!ren.ok())fl_alert("%s",ren.error());
+    if ( ren.ok() ) {
 		/*nle::g_preferences->lastVideoCodec( dlg.video_codec_menu->value() );
 		nle::g_preferences->lastAudioCodec( dlg.audio_codec_menu->value() );
 		nle::g_preferences->lastFramesize( dlg.frame_size_choice->value() );
@@ -98,6 +123,7 @@ if ( dlg.go && strcmp( "", dlg.export_filename->value() ) != 0 ) {
 		*/
 		nle::g_preferences->lastRenderFilename( dlg.export_filename->value() );
 		ren.go( &pDlg );
+        if(!ren.ok() && std::string(ren.error())!="Rendering cancelled")fl_alert("%s",ren.error());
 	}
 	
 
@@ -105,8 +131,9 @@ if ( dlg.go && strcmp( "", dlg.export_filename->value() ) != 0 ) {
 //	while ( pDlg.progressDialog->shown() )
 //		Fl::wait();
 //	pDlg.progressDialog->hide();
-}}
-            xywh {5 5 100 20}
+};
+} catch(const std::exception &e) {fl_alert("%s",e.what());}}
+            xywh {5 5 100 20} shortcut 0x40065
             code0 {\#include "ProgressDialog/ProgressDialog.h"}
             code1 {\#include "Renderer.H"}
             code3 {\#include "Prefs.H"}
@@ -150,7 +177,8 @@ nle::g_loadSaveManager->shutdown();}
         } {
           MenuItem undo_item {
             label Undo
-            callback {m_timelineView->clear_selection();
+            callback {if(nle::edit_focus("undo"))return;
+m_timelineView->clear_selection();
 nle::g_docManager->undo();
 m_timelineView->redraw();}
             xywh {0 0 100 20} shortcut 0x4007a deactivate
@@ -158,31 +186,41 @@ m_timelineView->redraw();}
           }
           MenuItem redo_item {
             label Redo
-            callback {m_timelineView->clear_selection();
+            callback {if(nle::edit_focus("redo"))return;
+m_timelineView->clear_selection();
 nle::g_docManager->redo();
 m_timelineView->redraw();}
-            xywh {0 0 100 20} shortcut 0x40079 deactivate divider
+            xywh {0 0 100 20} shortcut 0x5007a deactivate divider
             code0 {\#include "DocManager.H"}
           }
           MenuItem cut_item {
             label Cut
-            callback {m_timelineView->cut();}
+            callback {if(nle::edit_focus("cut"))return;
+m_timelineView->cut();}
             xywh {0 0 100 20} shortcut 0x40078 deactivate
           }
           MenuItem copy_item {
             label Copy
-            callback {m_timelineView->copy();}
+            callback {if(nle::edit_focus("copy"))return;
+m_timelineView->copy();}
             xywh {0 0 100 20} shortcut 0x40063 deactivate
           }
           MenuItem paste_item {
             label Paste
-            callback {m_timelineView->paste();}
+            callback {if(nle::edit_focus("paste"))return;
+m_timelineView->paste();}
             xywh {0 0 100 20} shortcut 0x40076 deactivate
           }
           MenuItem delete_item {
             label Delete
-            callback {m_timelineView->remove();}
+            callback {if(nle::edit_focus("delete"))return;
+m_timelineView->remove();}
             xywh {0 0 100 20} shortcut 0xffff deactivate
+          }
+          MenuItem {} {
+            label {Select All}
+            callback {nle::editor_menu(o,(void*)3);}
+            xywh {0 0 100 20} shortcut 0x40061
           }
         }
         Submenu {} {
@@ -277,6 +315,61 @@ nle::g_preferences->colorScheme( get_current_scheme() );}
           }
         }
         Submenu {} {
+          label {&Stereo}
+          xywh {0 0 100 20}
+        } {
+          MenuItem {} {
+            label {Project stereo settings...}
+            callback {nle::editor_menu(o,(void*)5);}
+            xywh {0 0 100 20}
+          }
+          MenuItem {} {
+            label {Selected clip stereo...}
+            callback {nle::editor_menu(o,(void*)6);}
+            xywh {0 0 100 20}
+          }
+          MenuItem {} {
+            label {Auto preview}
+            callback {nle::editor_menu(o,(void*)10);}
+            xywh {0 0 100 20} type Radio
+          }
+          MenuItem {} {
+            label {SBS pair}
+            callback {nle::editor_menu(o,(void*)11);}
+            xywh {0 0 100 20} type Radio
+          }
+          MenuItem {} {
+            label {Left eye}
+            callback {nle::editor_menu(o,(void*)12);}
+            xywh {0 0 100 20} type Radio
+          }
+          MenuItem {} {
+            label {Right eye}
+            callback {nle::editor_menu(o,(void*)13);}
+            xywh {0 0 100 20} type Radio
+          }
+          MenuItem {} {
+            label {Red / cyan anaglyph}
+            callback {nle::editor_menu(o,(void*)14);}
+            xywh {0 0 100 20} type Radio
+          }
+          MenuItem {} {
+            label {Original packed source}
+            callback {nle::editor_menu(o,(void*)15);}
+            xywh {0 0 100 20} type Radio
+          }
+          MenuItem {} {
+            label {Convert 2D to SBS (Arc)...}
+            callback {nle::editor_menu(o,(void*)20);}
+            xywh {0 0 100 20}
+          }
+          MenuItem {} {
+            label {View edited timeline in mpvr / XR...}
+            callback {nle::editor_menu(o,(void*)21);}
+            xywh {0 0 100 20}
+          }
+        }
+        Submenu {} {
           label {&Help} open
           xywh {20 20 100 20}
         } {
@@ -309,7 +402,7 @@ while (dlg.shown())
             } {
               Fl_Box m_videoView {
                 label VideoView
-                xywh {365 25 310 295} box DOWN_BOX labelcolor 32 resizable
+                xywh {365 25 310 295} box DOWN_BOX labelcolor 0 resizable
                 code0 {\#include "VideoViewGL.H"}
                 class {nle::VideoViewGL}
               }
@@ -462,7 +555,7 @@ m_videoView->redraw();}
             xywh {0 25 365 320}
           } {
             Fl_Tabs tab_view {open
-              xywh {0 50 365 255} box UP_BOX labelcolor 32 resizable
+              xywh {0 50 365 255} box UP_BOX labelcolor 0 resizable
             } {
               Fl_Group {} {
                 label {Media Browser}
@@ -702,7 +795,7 @@ if ( name ) {
               }
             }
             Fl_Scrollbar vScrollBar {
-              callback {scroll_area->position( 0, o->value() );}
+              callback {scroll_area->scroll_to( 0, o->value() );}
               xywh {680 370 20 210} maximum 50
             }
             Fl_Scroll scroll_area {

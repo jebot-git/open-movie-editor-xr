@@ -1,0 +1,151 @@
+.TH OPENMOVIEEDITOR 1 "2026-10-21" "de-xr" "User Commands"
+.SH NAME
+openmovieeditor \- native multitrack movie editor with QSV and side-by-side stereo
+.SH SYNOPSIS
+.B openmovieeditor
+.RI [ project.vproj ]
+.br
+.B openmovieeditor \-\-render
+.I PROJECT OUTPUT
+.RI [ options ]
+.br
+.B openmovieeditor \-\-roundtrip
+.I PROJECT COPY.vproj
+.br
+.B openmovieeditor \-\-export-srt
+.I PROJECT OUTPUT.srt
+.RB [ \-\-track " INDEX" ]
+.br
+.B openmovieeditor \-\-export-smil
+.I PROJECT OUTPUT.smil
+.RB [ \-\-track " INDEX" ]
+.SH DESCRIPTION
+Open Movie Editor retains the original multitrack timeline, project library,
+XML .vproj format, effects, node compositor, titles and render dialogs.
+This de-xr fork uses DomeD's patched FLTK 1.4.5 and adds FFmpeg/libav QSV
+media handling, per-clip stereo interpretation and mono/full/half SBS output.
+.PP
+Rendering and project/export commands initialize the original GUI engine and
+require a display. Use
+.B xvfb-run \-a
+for batch work without a desktop.
+The
+.B \-\-help
+and
+.B \-\-version
+commands exit before GUI initialization.
+.SH COMMANDS
+.TP
+.B \-\-render PROJECT OUTPUT
+Render the edited timeline with its effects and audio.
+Native FFmpeg output is finalized to a temporary file and published after success;
+failure or cancellation preserves an existing destination.
+.TP
+.B \-\-roundtrip PROJECT COPY.vproj
+Read and serialize an original-format project to the named copy.
+.TP
+.B \-\-export-srt PROJECT OUTPUT.srt
+Export titles from the selected track as subtitles.
+.TP
+.B \-\-export-smil PROJECT OUTPUT.smil
+Export the selected track in SMIL form.
+.TP
+.B \-\-help
+Print command usage and exit.
+.TP
+.B \-\-version
+Print the build version and exit.
+.SH RENDER OPTIONS
+.TP
+.B \-\-encoder NAME
+Video encoder. The added choices include av1_qsv (default), h264_qsv,
+hevc_qsv, vp9_qsv and libx264. Availability depends on the FFmpeg build,
+Intel device and driver. Encoding failures do not silently select software.
+.TP
+.B \-\-audio NAME
+Audio encoder; default aac.
+.TP
+.B \-\-size WIDTHxHEIGHT
+Per-eye display size; default 1280x720. Full SBS doubles stored width;
+half SBS retains width and signals sample aspect ratio 2.
+.TP
+.B \-\-fps NUM[/DEN]
+Positive rational or integer frame rate, no greater than 240 fps; default 24.
+.TP
+.B \-\-sbs mono|full|half
+Override the project output layout. If omitted, use the project's stereo output.
+.TP
+.B \-\-quality INTEGER
+QSV quality setting; default 23. VP9 uses bitrate/low-power settings instead.
+.TP
+.B \-\-bitrate INTEGER
+Video bitrate in bits per second; default 8000000.
+.TP
+.B \-\-device PATH
+Set the QSV render node for this invocation, overriding OME_QSV_DEVICE.
+.TP
+.B \-\-track INDEX
+Select the zero-based track for subtitle or SMIL export; default 0.
+.SH STEREO AND XR
+The Stereo menu selects source layout and eye order and project output defaults.
+Mono metadata takes precedence over filename hints; width alone does not select SBS.
+The preview offers pair, individual-eye, anaglyph and packed-source views.
+.PP
+Convert 2D to SBS (Arc) invokes the installed arc-sbs converter asynchronously
+before importing the result. It uses the existing model installation.
+View edited timeline in mpvr / XR renders the timeline and launches mpvr with an
+explicit stereo layout; mpvr and DomeD retain ownership of XR routing.
+.PP
+MKV retains stereo metadata most reliably. For MP4, use explicit player layout
+selection or an _FSBS/_HSBS filename. The working compositor is 8-bit RGBA;
+HDR management/export and a zero-copy effects pipeline are not implemented.
+.SH ENVIRONMENT
+.TP
+.B OME_QSV_DEVICE
+Intel render node. This workspace defaults to
+/dev/dri/by-path/pci-0000:03:00.0-render; choose the actual node on another host.
+.TP
+.B OME_HW_DECODE
+Set to required to require hardware decoding, or off for software decoding.
+The default attempts QSV and permits software fallback during decoder setup.
+.TP
+.B OME_AUDIO_BACKEND
+Set to portaudio to skip JACK. Otherwise JACK is tried without starting a server,
+then PortAudio is used.
+.TP
+.B XDG_CONFIG_HOME
+Dome appearance is read from dome/appearance.json below this directory,
+defaulting to ~/.config.
+.TP
+.B XDG_CACHE_HOME
+Root for openmovieeditor/previews, defaulting to ~/.cache.
+.SH FILES
+.TP
+.I ~/Video Projects
+Original project library used by the graphical Open, Save and Save As workflow.
+Opening a supplied project imports it into the library without modifying the source.
+.TP
+.I ~/.cache/openmovieeditor/previews
+Retained rendered XR preview files, unless XDG_CACHE_HOME overrides the root.
+.TP
+.I /usr/local/libexec/openmovieeditor
+Default system installation's private executable and compatibility libraries.
+The installation prefix and libexec directory are CMake options.
+.SH EXIT STATUS
+Command-line engine operations return 0 on success and 1 on an exception.
+Render/round-trip results and command errors include JSON on stdout/stderr.
+.SH EXAMPLES
+.nf
+openmovieeditor project.vproj
+xvfb-run \-a openmovieeditor \-\-render film.vproj film.mkv \\
+  \-\-encoder av1_qsv \-\-fps 30000/1001 \-\-sbs full
+xvfb-run \-a openmovieeditor \-\-export-srt film.vproj titles.srt \-\-track 0
+.fi
+.SH SEE ALSO
+.BR arc-sbs (1),
+.BR mpvr (1),
+.BR xvfb-run (1)
+.PP
+README.XR.md contains release build, staging and installation instructions.
+This source manual is not yet installed by the current CMake rules;
+read it with man \-l doc/man/openmovieeditor.1.

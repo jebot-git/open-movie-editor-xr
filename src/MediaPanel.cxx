@@ -107,7 +107,7 @@ namespace nle
 		o->labeltype(FL_NORMAL_LABEL);
 		o->labelfont(0);
 		o->labelsize(14);
-		o->labelcolor(FL_BLACK);
+		o->labelcolor(FL_FOREGROUND_COLOR);
 		o->callback((Fl_Callback*)cb_browser);
 		o->align(FL_ALIGN_BOTTOM);
 		o->when(FL_WHEN_RELEASE_ALWAYS);
@@ -119,7 +119,7 @@ namespace nle
 		o->labeltype(FL_NORMAL_LABEL);
 		o->labelfont(0);
 		o->labelsize(14);
-		o->labelcolor(FL_BLACK);
+		o->labelcolor(FL_FOREGROUND_COLOR);
 		o->align(FL_ALIGN_BOTTOM);
 		o->when(FL_WHEN_RELEASE_ALWAYS);
 	      }
@@ -146,9 +146,9 @@ namespace nle
 	    o->end();
 	  }
 	  resize( x, y, w, h );
-	  const char* folder = g_preferences->getMediaFolder().c_str();
+	  std::string folder = g_preferences->getMediaFolder();
 	  browser->load( folder );
-	  load( folder );
+	  load( folder.c_str() );
 	}
 	void MediaPanel::load( const char* folder )
 	{

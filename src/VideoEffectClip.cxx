@@ -102,7 +102,9 @@ LazyFrame* VideoEffectClip::getFrame( int64_t position )
 		effect = dynamic_cast<IVideoEffect*>( node->filter );
 		node = node->next;
 		if ( !effect ) { continue; }
-		f = effect->getFrame( f, position_in_file );
+		auto source=*f->format();
+        f = effect->getFrame( f, position_in_file );
+        if(f && f->format()->image_width==source.image_width && f->format()->image_height==source.image_height){f->format()->pixel_width=source.pixel_width;f->format()->pixel_height=source.pixel_height;}
 	}
 
 	// TODO: Copy pixel aspect
@@ -115,6 +117,7 @@ ClipData* VideoEffectClip::vec_getClipData()
 {
 	XmlClipData* xml = new XmlClipData;
 	xml->m_xml = new TiXmlElement( "clip_data" );
+    if(auto clip=dynamic_cast<VideoClip*>(this)){xml->m_xml->SetAttribute("stereo_input",clip->file()->stereoOverride());xml->m_xml->SetAttribute("stereo_swap",clip->file()->eyeOrderOverride());}
 	filter_stack* filters;
 	for ( filters = m_filterClip->getFilters(); filters; filters = filters->next ) {
 		TiXmlElement* filter_xml = new TiXmlElement( "filter" );

@@ -19,6 +19,11 @@
 
 #include "VideoWriterQT.H"
 #include <cassert>
+#include <vector>
+#include <unistd.h>
+extern "C" {
+#include <libavutil/rational.h>
+}
 #include "LazyFrame.H"
 #include "EncodingPreset.H"
 #include <lqt.h>
@@ -31,28 +36,9 @@ namespace nle
 {
 void convert_pixel_aspect_to_pixel_w_h( float in, int& pw, int& ph )
 {
-	if ( in > 1.093 && in < 1.095 ) {
-		pw = 128;
-		ph = 117;
-	} else if ( in > 1.4586 && in < 1.4588 ) {
-		pw = 512;
-		ph = 351;
-	} else if ( in > 0.9116 && in < 0.9118 ) {
-		pw = 4320;
-		ph = 4739;
-	} else if ( in > 1.2154 && in < 1.2156 ) {
-		pw = 5760;
-		ph = 4739;
-	} 
-	pw = 1;
-	ph = 1;
-/*
-128/117  = 1.094
-512/351  = 1.4587
-4320/4739 = 0.9117
-5760/4739 = 1.21557
-*/
+  auto ratio=av_d2q(in,100000);pw=ratio.num;ph=ratio.den;
 }
+
 void convert_ome_format_to_gavl_format( video_format* in, gavl_video_format_t* out )
 {
 	out->frame_width  = in->w;
@@ -79,12 +65,17 @@ void convert_ome_format_to_gavl_format( video_format* in, gavl_video_format_t* o
 VideoWriterQT::VideoWriterQT( EncodingPreset* preset, const char* filename )
 {
 	preset->getFormat( &m_format );
+    m_samplerate=m_format.samplerate;m_destination=filename;
+    std::string pattern=m_destination+".ome-XXXXXX";std::vector<char> temp(pattern.begin(),pattern.end());temp.push_back(0);
+    int fd=mkstemp(temp.data());if(fd<0){m_problem="Cannot create temporary libquicktime output";return;}close(fd);m_temporary=temp.data();
+    filename=m_temporary.c_str();
 	if ( preset->m_avi_odml ) {
 		m_qt = lqt_open_write ( filename, LQT_FILE_AVI_ODML ); /* For new Libquicktime */
 	} else {
 		m_qt = lqt_open_write( filename, preset->m_file_type ); /* For new Libquicktime */
 	}
 
+    if(!m_qt){m_problem="Cannot open libquicktime output";return;}
 	lqt_codec_info_t** codec = lqt_find_video_codec_by_name( m_format.video_codec );
 	if (!codec || !codec[0]) {
 		cerr << "Video Codec missing: " << m_format.video_codec << endl;
@@ -115,8 +106,21 @@ VideoWriterQT::VideoWriterQT( EncodingPreset* preset, const char* filename )
 }
 VideoWriterQT::~VideoWriterQT()
 {
-	quicktime_close( m_qt );
-	lqt_gavl_rows_destroy( m_rows );
+	if(m_qt)quicktime_close(m_qt);
+	if(m_rows)lqt_gavl_rows_destroy(m_rows);
+    if(!m_temporary.empty())std::remove(m_temporary.c_str());
+}
+bool VideoWriterQT::finish(){
+  if(!ok())return false;
+  if(m_done)return true;
+  quicktime_close(m_qt);m_qt=nullptr;
+  if(std::rename(m_temporary.c_str(),m_destination.c_str())){m_problem="Cannot publish libquicktime output";return false;}
+  m_temporary.clear();m_done=true;return true;
+}
+void VideoWriterQT::cancel(){
+  if(m_qt){quicktime_close(m_qt);m_qt=nullptr;}
+  if(!m_temporary.empty()){std::remove(m_temporary.c_str());m_temporary.clear();}
+  m_problem="Rendering cancelled";
 }
 void VideoWriterQT::encodeVideoFrame( LazyFrame* frame )
 {

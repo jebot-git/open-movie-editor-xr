@@ -24,6 +24,7 @@
 #include "video_format.H"
 #include <lqt.h>
 #include <gavl/gavl.h>
+#include <string>
 
 namespace nle
 {
@@ -39,14 +40,20 @@ class VideoWriterQT : public IVideoFileWriter
 		void encodeAudioFrame( float* buffer, int frames );
 		video_format* format() { return &m_format; }
 		int samplerate() { return m_samplerate; }
+        bool ok() const {return m_problem.empty()&&(m_qt||m_done);}
+        const char *error() const {return m_problem.c_str();}
+        bool finish();
+        void cancel();
 	private:
-		quicktime_t *m_qt;
+		quicktime_t *m_qt=nullptr;
+        std::string m_problem,m_destination,m_temporary;
+        bool m_done=false;
 		float left_buffer[32000];
 		float right_buffer[32000];
 		video_format m_format;
 		int m_samplerate;
-		unsigned char** m_rows;
-		gavl_video_format_t m_gavl_format;
+		unsigned char** m_rows=nullptr;
+		gavl_video_format_t m_gavl_format{};
 		int64_t m_timestamp;
 		//gavl_audio_format_t m_gavl_audio_format;
 };

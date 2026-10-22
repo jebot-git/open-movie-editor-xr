@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include "DiskCache.H"
+#include <unistd.h>
 #include "globals.H"
 #include "helper.H"
 

@@ -21,6 +21,7 @@
 #define _GMERLIN_FACTORY_H_
 
 #include <gavl/gavl.h>
+#include <vector>
 extern "C" {
 	#include <gmerlin/pluginregistry.h>
 }
@@ -42,6 +43,7 @@ class GmerlinFactory
 		bg_cfg_section_t*     m_plugin_cfg;
 		bg_plugin_registry_t* m_plugin_registry;
 		char** m_filters;
+        std::vector<FilterFactory*> m_effects;
 };
 
 } /* namespace nle */

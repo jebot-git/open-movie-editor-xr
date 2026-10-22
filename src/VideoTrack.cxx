@@ -276,7 +276,7 @@ int VideoTrack::fillBuffer( float* output, unsigned long frames, int64_t positio
 					 frames - written, position + written
 					);
 			written += inc;
-			incBuffer += inc;
+			incBuffer += inc * 2;
 			if ( written < frames ) { m_current = m_current->next; }
 			while ( m_current && m_current->clip->type() != CLIP_TYPE_VIDEO && m_current->clip->type() != CLIP_TYPE_AUDIO ) {
 				m_current = m_current->next;

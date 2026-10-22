@@ -1,131 +1,34 @@
-/*  VideoThumbnails.cxx
- *
- *  Copyright (C) 2006 Richard Spindler <richard.spindler AT gmail.com>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- */
-
-#include <FL/Fl_Shared_Image.H>
-
-extern "C" {
-#include <gmerlin/avdec.h>
-}
-
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "VideoThumbnails.H"
+#include "VideoFileGmerlin.H"
+#include "LazyFrame.H"
 #include "DiskCache.H"
-#include "helper.H"
-
+#include <FL/Fl_Shared_Image.H>
 #include <cstring>
-#include <iostream>
-
-namespace nle
-{
-
-bool VideoThumbnails::get( const char* filename, unsigned char* rgb, int &w, int &h )
-{
-	DiskCache cache( filename, "thumb" );
-	if ( cache.isEmpty() ) {
-		bgav_t* decoder = bgav_create();
-		if ( !bgav_open( decoder, filename ) ) {
-			bgav_close( decoder );
-			decoder = 0;
-		} else if( bgav_is_redirector( decoder ) ) {
-			bgav_close( decoder );
-			decoder = 0;
-		} else if ( bgav_num_video_streams( decoder, 0 ) == 0 ) {
-			bgav_close( decoder );
-			decoder = 0;
-		} else if ( !bgav_select_track( decoder, 0 ) ) {
-			bgav_close( decoder );
-			decoder = 0;
-		} else if ( !bgav_set_video_stream( decoder, 0, BGAV_STREAM_DECODE ) ) {
-			bgav_close( decoder );
-			decoder = 0;
-		} else if ( !bgav_start( decoder ) ) {
-			bgav_close( decoder );
-			decoder = 0;
-		}
-		if ( !decoder ) {
-			Fl_Shared_Image* image;
-			image = Fl_Shared_Image::get( filename );
-			if ( !image || image->d() != 3 ) {
-				cache.clean();
-				return false;
-			}
-			w = image->w();
-			h = image->h();
-			Fl_Image* image2 = image->copy( VIDEO_THUMBNAIL_WIDTH, VIDEO_THUMBNAIL_HEIGHT );
-			image->release();
-			char** d = (char**)image2->data();
-			memcpy( rgb, d[0], VIDEO_THUMBNAIL_HEIGHT * VIDEO_THUMBNAIL_WIDTH * 3 );
-			delete image2;
-			cache.write( &w, sizeof(int) );
-			cache.write( &h, sizeof(int) );
-			cache.write( rgb, VIDEO_THUMBNAIL_HEIGHT * VIDEO_THUMBNAIL_WIDTH * 3 );
-			cache.clean();
-			return true;
-		}
-		const gavl_video_format_t *video_format = bgav_get_video_format( decoder, 0 );
-		gavl_video_frame_t *gavl_frame = gavl_video_frame_create( video_format );
-		bgav_read_video( decoder, gavl_frame, 0 );
-		bgav_close( decoder );
-		decoder = 0;
-		gavl_video_format_t rgb_format;
-		gavl_video_format_copy( &rgb_format, video_format );
-		rgb_format.pixelformat = GAVL_RGB_24;
-		rgb_format.interlace_mode = GAVL_INTERLACE_NONE;
-		rgb_format.image_height = rgb_format.frame_height = VIDEO_THUMBNAIL_HEIGHT;
-		rgb_format.image_width = rgb_format.frame_width = VIDEO_THUMBNAIL_WIDTH;
-		gavl_video_frame_t *rgb_frame = gavl_video_frame_create( &rgb_format );
-
-		gavl_video_converter_t *converter = gavl_video_converter_create();
-		gavl_video_options_t* options = gavl_video_converter_get_options( converter );
-		gavl_video_options_set_deinterlace_mode( options, GAVL_DEINTERLACE_SCALE );
-		gavl_video_options_set_scale_mode( options, GAVL_SCALE_NEAREST );
-		gavl_video_converter_init( converter, video_format, &rgb_format );
-		gavl_video_convert( converter, gavl_frame, rgb_frame );
-		
-
-		gavl_video_converter_destroy( converter );
-		gavl_video_frame_destroy( gavl_frame );
-
-		unsigned char* src = (unsigned char*)rgb_frame->planes[0];
-		int strides = rgb_frame->strides[0];
-		for ( int i = 0; i < VIDEO_THUMBNAIL_HEIGHT; i++ ) {
-			memcpy( &rgb[VIDEO_THUMBNAIL_WIDTH*i*3], &src[i*strides], VIDEO_THUMBNAIL_WIDTH * 3 );
-		}
-		w = video_format->frame_width;
-		h = video_format->frame_height;
-		cache.write( &w, sizeof(int) );
-		cache.write( &h, sizeof(int) );
-		cache.write( rgb, VIDEO_THUMBNAIL_HEIGHT * VIDEO_THUMBNAIL_WIDTH * 3 );
-		cache.clean();
-		gavl_video_frame_destroy( rgb_frame );
-		return true;
-	} else {
-		if ( cache.size() == 0 ) {
-			return 0;
-		}
-		cache.read( &w, sizeof(int) );
-		cache.read( &h, sizeof(int) );
-		cache.read( rgb, VIDEO_THUMBNAIL_HEIGHT * VIDEO_THUMBNAIL_WIDTH * 3 );
-		return true;
-	}
+namespace nle {
+bool VideoThumbnails::get(const char *filename,unsigned char *rgb,int &w,int &h) {
+  DiskCache cache(filename,"ffmpeg-thumb-v1");
+  if(!cache.isEmpty() && cache.size()>=int(2*sizeof(int)+VIDEO_THUMBNAIL_WIDTH*VIDEO_THUMBNAIL_HEIGHT*3)) {
+    cache.read(&w,sizeof(w));cache.read(&h,sizeof(h));cache.read(rgb,VIDEO_THUMBNAIL_WIDTH*VIDEO_THUMBNAIL_HEIGHT*3);return true;
+  }
+  VideoFileGmerlin video(filename);
+  if(video.ok()) {
+    auto frame=video.getFrame(0);if(!frame)return false;
+    w=video.width();h=video.height();
+    frame->set_rgb_target(VIDEO_THUMBNAIL_WIDTH,VIDEO_THUMBNAIL_HEIGHT);
+    auto target=frame->target();
+    for(int y=0;y<VIDEO_THUMBNAIL_HEIGHT;++y)std::memcpy(rgb+y*VIDEO_THUMBNAIL_WIDTH*3,target->planes[0]+y*target->strides[0],VIDEO_THUMBNAIL_WIDTH*3);
+  } else {
+    auto image=Fl_Shared_Image::get(filename);if(!image)return false;
+    w=image->w();h=image->h();
+    auto scaled=image->copy(VIDEO_THUMBNAIL_WIDTH,VIDEO_THUMBNAIL_HEIGHT);image->release();
+    if(!scaled || (scaled->d()!=3 && scaled->d()!=4)){delete scaled;return false;}
+    const auto data=reinterpret_cast<const unsigned char*>(scaled->data()[0]);
+    const int stride=scaled->ld()?scaled->ld():scaled->w()*scaled->d();
+    for(int y=0;y<VIDEO_THUMBNAIL_HEIGHT;++y)for(int x=0;x<VIDEO_THUMBNAIL_WIDTH;++x)
+      std::memcpy(rgb+(y*VIDEO_THUMBNAIL_WIDTH+x)*3,data+y*stride+x*scaled->d(),3);
+    delete scaled;
+  }
+  cache.write(&w,sizeof(w));cache.write(&h,sizeof(h));cache.write(rgb,VIDEO_THUMBNAIL_WIDTH*VIDEO_THUMBNAIL_HEIGHT*3);cache.clean();return true;
 }
-
-
-
-
-} /* namespace nle */
+}

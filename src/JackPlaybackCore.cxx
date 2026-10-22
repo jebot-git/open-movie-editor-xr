@@ -186,7 +186,7 @@ JackPlaybackCore::JackPlaybackCore( IAudioReader* audioReader, IVideoReader* vid
 	fcntl( m_play_pipe[1], F_SETFL, O_NONBLOCK );
 	fcntl( m_stop_pipe[1], F_SETFL, O_NONBLOCK );
 
-	jack_client = jack_client_open( "openmovieeditor", JackNullOption, 0 );
+	jack_client = jack_client_open( "openmovieeditor", JackNoStartServer, 0 );
 
 	if (!jack_client) {
 		cerr << "could not connect to jack." << endl;

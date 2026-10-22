@@ -25,12 +25,14 @@
 
 #include "IVideoWriter.H"
 #include <sstream>
+#include <memory>
 
 namespace nle
 {
 
 class Timeline;
 class LazyFrame;
+class StereoRender;
 
 class VideoViewGL : public Fl_Gl_Window, public IVideoWriter
 {
@@ -44,6 +46,7 @@ class VideoViewGL : public Fl_Gl_Window, public IVideoWriter
 		void seek( int64_t position );
 		void play();
 		void stop();
+        void resetPreview();
 		void zoom( float zoom ) { m_zoom = zoom; }
 		std::stringstream opengl_system_information;
 	private:
@@ -53,6 +56,11 @@ class VideoViewGL : public Fl_Gl_Window, public IVideoWriter
 		void drawVideoBorder();
 		float m_zoom;
 		bool m_once;
+        std::unique_ptr<StereoRender> m_stereo;
+        std::string m_snapshot;
+        int m_previewMode=-1;
+        unsigned int m_texture=0;
+        int m_textureWidth=0,m_textureHeight=0;
 };
 
 extern VideoViewGL* g_videoView;

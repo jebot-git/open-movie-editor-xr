@@ -40,8 +40,8 @@ AudioFileProject::AudioFileProject( std::string filename )
 	Timeline* x = g_timeline;
 	m_timeline = new Timeline;
 	g_timeline = x;
-	m_timeline->read( filename );
 	m_timeline->render_mode( true );
+	m_timeline->read( filename );
 	m_samplerate = 48000;
 	m_timeline->sort();
 	m_timeline->seek( 0 );

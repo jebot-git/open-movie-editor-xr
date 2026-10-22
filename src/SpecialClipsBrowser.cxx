@@ -1,3 +1,4 @@
+#include "EditorIntegration.H"
 /*  SpecialClipsBrowser.cxx
  *
  *  Copyright (C) 2005 Richard Spindler <richard.spindler AT gmail.com>
@@ -113,7 +114,7 @@ void SpecialClipsBrowser::item_draw( void* p, int x, int y, int w, int h ) const
 		bg_color = FL_SELECTION_COLOR;
 		fl_draw_box( FL_FLAT_BOX, x, y, w, h, FL_SELECTION_COLOR );
 	}
-	fl_font( FL_HELVETICA, 14 );
+	fl_font(nle::editor_font(),nle::editor_font_size(14));
 	fl_color( FL_FOREGROUND_COLOR );
 	switch ( f->type ) {
 		case PL_VIDEO_SRC: 
@@ -134,7 +135,7 @@ void* SpecialClipsBrowser::item_first() const
 }
 int SpecialClipsBrowser::item_height( void* ) const
 {
-	fl_font( FL_HELVETICA, 14 );
+	fl_font(nle::editor_font(),nle::editor_font_size(14));
 	return fl_height();
 }
 void* SpecialClipsBrowser::item_next( void* p ) const

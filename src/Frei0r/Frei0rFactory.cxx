@@ -54,6 +54,8 @@ Frei0rFactory::Frei0rFactory( IEffectMenu* menu )
 	enumerate( home + FREI0R_DIR_3, menu );
 	enumerate( FREI0R_DIR_2, menu );
 	enumerate( FREI0R_DIR_1, menu );
+	enumerate( "/usr/lib64/frei0r-1/", menu );
+	enumerate( "/usr/local/lib64/frei0r-1/", menu );
 }
 
 Frei0rFactory::~Frei0rFactory()

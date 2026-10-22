@@ -1,3 +1,4 @@
+#include "EditorIntegration.H"
 /*  VideoClipArtist.cxx
  *
  *  Copyright (C) 2006 Richard Spindler <richard.spindler AT gmail.com>
@@ -85,7 +86,7 @@ void VideoClipArtist::render( Rect& rect_in, int64_t start, int64_t stop )
 
 	_x = g_timelineView->get_screen_position( m_clip->position(), m_clip->track()->stretchFactor() );
 	fl_color( FL_DARK3 );
-	fl_font( FL_HELVETICA, 11 );
+	fl_font(nle::editor_font(),nle::editor_font_size(11));
 	fl_draw( fl_filename_name( m_clip->filename().c_str() ), _x + 6, rect.y + rect.h - 4 );
 	fl_color( FL_WHITE );
 	fl_draw( fl_filename_name( m_clip->filename().c_str() ), _x + 5, rect.y + rect.h - 5 );

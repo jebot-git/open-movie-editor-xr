@@ -192,6 +192,7 @@ void TitleClip::init()
 
 TitleClip::~TitleClip()
 {
+    delete m_lazy_frame;gavl_video_frame_null(m_gavl_frame);gavl_video_frame_destroy(m_gavl_frame);
 	if ( m_artist ) {
 		delete m_artist;
 	}
@@ -199,8 +200,9 @@ TitleClip::~TitleClip()
 		delete m_image;
 	}
 	if ( m_alpha ) {
-		delete m_alpha;
+		delete [] m_alpha;
 	}
+	delete [] m_pixels;
 	if ( m_offscreen ) {
 		fl_delete_offscreen(m_offscreen);
 	}

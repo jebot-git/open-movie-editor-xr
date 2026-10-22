@@ -18,6 +18,7 @@
  */
 
 #include <dlfcn.h>
+#include <cstring>
 #include <tinyxml.h>
 
 #include "frei0r.h"
@@ -69,7 +70,12 @@ LazyFrame* Frei0rEffect::getFrame( LazyFrame* frame, int64_t position )
 	if ( m_bypass ) {
 		return frame;
 	}
-	f0r_update( m_instance, position / (float)NLE_TIME_BASE, (uint32_t*)frame->RGBA()->planes[0], (uint32_t*)m_frame );
+	auto input=frame->RGBA();auto source=reinterpret_cast<uint32_t*>(input->planes[0]);
+    if(input->strides[0]!=m_w*4){m_packedInput.resize(size_t(m_w)*m_h);for(int y=0;y<m_h;++y)std::memcpy(m_packedInput.data()+size_t(y)*m_w,input->planes[0]+y*input->strides[0],m_w*4);source=m_packedInput.data();}
+    auto destination=reinterpret_cast<uint32_t*>(m_frame);
+    if(m_gavl_frame->strides[0]!=m_w*4){m_packedOutput.resize(size_t(m_w)*m_h);destination=m_packedOutput.data();}
+    f0r_update(m_instance,position/double(NLE_TIME_BASE),source,destination);
+    if(destination!=reinterpret_cast<uint32_t*>(m_frame))for(int y=0;y<m_h;++y)std::memcpy(m_frame+y*m_gavl_frame->strides[0],destination+size_t(y)*m_w,m_w*4);
 	return m_lazy_frame;
 }
 
@@ -232,9 +238,9 @@ void Frei0rEffect::setFilterData( FilterData* )
 }
 const char* Frei0rEffect::identifier()
 {
-	string result = "effect:frei0r:";
-	result += name();
-	return result.c_str(); //TODO: this is not OK?
+	m_identifier = "effect:frei0r:";
+	m_identifier += name();
+	return m_identifier.c_str();
 }
 IEffectWidget* Frei0rEffect::widget()
 {
