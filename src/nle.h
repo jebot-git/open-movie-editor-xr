@@ -4,7 +4,7 @@
 #define nle_h
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
-#include <FL/Fl_Menu_Bar.H>
+#include "desktop-menu.h"
 #include "ProgressDialog/ProgressDialog.h"
 #include "Renderer.H"
 #include "Prefs.H"

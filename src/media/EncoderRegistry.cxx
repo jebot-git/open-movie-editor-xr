@@ -19,13 +19,15 @@ static lqt_parameter_info_t integer(const char *name,const char *label,int value
   p.val_default.val_int=value;p.val_min.val_int=lo;p.val_max.val_int=hi;return p;
 }
 static void add(const char *name,const char *encoder,const char *label,bool audio) {
-  if(!avcodec_find_encoder_by_name(encoder))return;
+  const bool silent = audio && std::strcmp(name,"none")==0;
+  if(!silent && !avcodec_find_encoder_by_name(encoder))return;
   auto &names=audio?audioNames:videoNames;names[name]=encoder;
   // Keep any existing libquicktime descriptor with the same legacy name.
   auto &list=audio?audios:videos;
   for(auto item:list)if(!std::strcmp(item->name,name))return;
   parameters.emplace_back();auto &params=parameters.back();
-  if(audio)params.push_back(integer("bit_rate_audio","Audio bitrate (bits/s)",192000,8000,1536000));
+  if(silent) {}
+  else if(audio)params.push_back(integer("bit_rate_audio","Audio bitrate (bits/s)",192000,8000,1536000));
   else {
     params.push_back(integer("ff_bit_rate_video","Video bitrate (bits/s; VP9 QSV)",8000000,64000,200000000));
     params.push_back(integer("ome_quality","Quality / CRF (lower is higher quality)",23,1,51));
@@ -57,6 +59,8 @@ void extend_encoder_registry() {
   add("pcm_s16le","pcm_s16le","PCM 16-bit — uncompressed",true);
   add("flac","flac","FLAC — lossless",true);
   add("libopus","libopus","Opus — FFmpeg",true);
+  add("libvorbis","libvorbis","Vorbis — FFmpeg",true);
+  add("none","","No audio",true);
   videos.push_back(nullptr);audios.push_back(nullptr);
   g_video_codec_info=videos.data();g_audio_codec_info=audios.data();
 }

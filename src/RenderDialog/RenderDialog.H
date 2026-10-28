@@ -126,6 +126,8 @@ private:
   static void cb_AVI(Fl_Menu_*, void*);
   void cb_MP4_i(Fl_Menu_*, void*);
   static void cb_MP4(Fl_Menu_*, void*);
+  void cb_WebM_i(Fl_Menu_*, void*);
+  static void cb_WebM(Fl_Menu_*, void*);
   void cb_3GP_i(Fl_Menu_*, void*);
   static void cb_3GP(Fl_Menu_*, void*);
 public:
@@ -133,6 +135,7 @@ public:
   void show();
   ~CustomFormatDialog();
   nle::EncodingPreset* getEncodingPreset();
+  void selectContainer(int index);
 private:
   bool go; 
 public:

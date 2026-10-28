@@ -64,7 +64,8 @@ void setAudioCodecMenu( Fl_Choice* menu, int type )
 	lqt_codec_info_t** info = g_audio_codec_info;
 	menu->clear();
 	for ( int i = 0; info[i]; i++ ) {
-		if ( !(type & info[i]->compatibility_flags) ) {
+        const std::string encoder = audio_encoder_name(info[i]->name);
+        if (type == WEBM_CONTAINER ? (encoder != "libopus" && encoder != "libvorbis" && std::strcmp(info[i]->name,"none")) : !(type & info[i]->compatibility_flags)) {
 			continue;
 		}
 		string name = info[i]->long_name;
@@ -79,7 +80,8 @@ void setVideoCodecMenu( Fl_Choice* menu, int type )
 	lqt_codec_info_t** info = g_video_codec_info;
 	menu->clear();
 	for ( int i = 0; info[i]; i++ ) {
-		if ( !(type & info[i]->compatibility_flags) ) {
+        const std::string encoder = video_encoder_name(info[i]->name);
+        if (type == WEBM_CONTAINER ? (encoder != "vp9_qsv" && encoder != "av1_qsv" && encoder != "libvpx-vp9" && encoder != "libvpx" && encoder != "libaom-av1" && encoder != "libsvtav1") : !(type & info[i]->compatibility_flags)) {
 			continue;
 		}
 		string name = info[i]->long_name;
@@ -655,6 +657,7 @@ EncodingPreset::EncodingPreset( EncodingPreset* preset )
 #endif
 	m_format = preset->m_format;
     m_stereoLayout = preset->m_stereoLayout;
+    m_container = preset->m_container;
 	lqt_audio_codecs = g_audio_codec_info;//lqt_query_registry( 1, 0, 1, 0 );
 	lqt_video_codecs = g_video_codec_info;//lqt_query_registry( 0, 1, 1, 0 );
 	construct_CodecParameters( lqt_audio_codecs, lqt_video_codecs, preset );
@@ -688,10 +691,11 @@ EncodingPreset::~EncodingPreset()
 }
 IVideoFileWriter* EncodingPreset::getFileWriter( const char* filename )
 {
-	if(ffmpeg_video_encoder(m_format.video_codec)) return new FFmpegWriter(this,filename);
+	if(!m_container.empty()&&!ffmpeg_video_encoder(m_format.video_codec))throw std::runtime_error("WebM requires a native FFmpeg video encoder");
+    if(ffmpeg_video_encoder(m_format.video_codec)) return new FFmpegWriter(this,filename);
     if(m_stereoLayout)throw std::runtime_error("Choose an FFmpeg or Intel QSV video codec for SBS export");
     auto v=lqt_find_video_codec_by_name(m_format.video_codec);auto a=lqt_find_audio_codec_by_name(m_format.audio_codec);
-    bool available=v&&v[0]&&a&&a[0];lqt_destroy_codec_info(v);lqt_destroy_codec_info(a);
+    bool available=v&&v[0]&&((a&&a[0])||std::strcmp(m_format.audio_codec,"none")==0);lqt_destroy_codec_info(v);lqt_destroy_codec_info(a);
     if(!available)throw std::runtime_error("The selected libquicktime codec is unavailable; choose a native FFmpeg codec");
     return new nle::VideoWriterQT( this, filename );
 }
@@ -701,6 +705,7 @@ void EncodingPreset::writeXML( TiXmlElement* xml_node )
 	TiXmlElement* effect = xml_node;
 	parameter = new TiXmlElement( "parameter" );
 	effect->LinkEndChild( parameter );*/
+	xml_node->SetAttribute( "container", m_container.c_str() );
 	xml_node->SetAttribute( "stereo_layout", m_stereoLayout );
     xml_node->SetAttribute( "name", m_format.name );
 	TiXmlElement* parameter;
@@ -770,6 +775,9 @@ void EncodingPreset::writeXML( TiXmlElement* xml_node )
 }
 void EncodingPreset::readXML( TiXmlElement* xml_node )
 {
+    const char* containerName=xml_node->Attribute("container");
+    m_container=containerName?containerName:"";
+    if(!m_container.empty()&&m_container!="webm")throw std::runtime_error("Unsupported preset container");
     xml_node->QueryIntAttribute("stereo_layout",&m_stereoLayout);
 	const char* str;
 	str = xml_node->Attribute( "name" );

@@ -56,7 +56,10 @@ try:
   wait(lambda:state()['source']=='wayland')
   wayland=wait(lambda:re.search(r'Dome Wayland socket: (\S+)',(out/'compositor.log').read_text()))[1]
   client={**env,'WAYLAND_DISPLAY':wayland,'FLTK_BACKEND':'wayland','XDG_CURRENT_DESKTOP':'Dome','OME_AUDIO_BACKEND':'portaudio','DE_XR_APPEARANCE_TRACE':'1'};client.pop('DISPLAY',None)
-  args=[root/'scripts/run-local',root/'.deps/native-tests/base.vproj']
+  args=[os.environ.get('OME_BINARY',str(root/'scripts/run-local')),root/'.deps/native-tests/base.vproj']
+  if os.environ.get('OME_BINARY'):
+   client['LD_LIBRARY_PATH']=str(root/'.deps/install/lib')+':'+str(root/'.deps/sysroot/usr/lib64')+':/opt/fltk-vr/toolkit/lib'
+   client['GMERLIN_PLUGIN_PATH']=str(root/'.deps/install/lib/gmerlin/plugins');client['LIBQUICKTIME_PLUGIN_DIR']=str(root/'.deps/sysroot/usr/lib64/libquicktime')
   if os.getenv('OME_DEBUGGER'):
    client['LD_LIBRARY_PATH']=str(root/'.deps/install/lib')+':'+str(root/'.deps/sysroot/usr/lib64')+':/opt/fltk-vr/toolkit/lib64'
    client['GMERLIN_PLUGIN_PATH']=str(root/'.deps/install/lib/gmerlin/plugins');client['LIBQUICKTIME_PLUGIN_DIR']=str(root/'.deps/sysroot/usr/lib64/libquicktime')

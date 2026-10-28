@@ -978,7 +978,7 @@ void NleUI::cb_projectChoice(Fl_Choice* o, void* v) {
 NleUI::NleUI() {
   { mainWindow = new Fl_Double_Window(700, 600, "Open Movie Editor");
     mainWindow->callback((Fl_Callback*)cb_mainWindow, (void*)(this));
-    { Fl_Menu_Bar* o = new Fl_Menu_Bar(0, 0, 530, 25, "Black Borders");
+    { DesktopMenuBar* o = new DesktopMenuBar(0, 0, 530, 25);
       o->menu(menu_Black);
     } // Fl_Menu_Bar* o
     { timeline_tile = new Fl_Tile(0, 25, 700, 575);

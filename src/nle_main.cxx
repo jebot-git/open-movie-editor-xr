@@ -204,8 +204,8 @@ int main( int argc, char** argv )
 
 	if(dx::dome()) {dx::init();dx::style(nui.mainWindow);}
     nui.mainWindow->xclass("org.openmovieeditor.Editor");
-    Fl_Menu_Bar *nativeMenu=nullptr;
-    for(int i=0;i<nui.mainWindow->children();++i)if(auto m=dynamic_cast<Fl_Menu_Bar*>(nui.mainWindow->child(i))){nativeMenu=m;break;}
+    DesktopMenuBar *nativeMenu=nullptr;
+    for(int i=0;i<nui.mainWindow->children();++i)if(auto m=dynamic_cast<DesktopMenuBar*>(nui.mainWindow->child(i))){nativeMenu=m;break;}
     std::unique_ptr<DesktopMenu> desktopMenu;
     if(nativeMenu)desktopMenu.reset(new DesktopMenu(*nui.mainWindow,*nativeMenu));
     nle::install_editor_integration(nui);

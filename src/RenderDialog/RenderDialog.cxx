@@ -7,6 +7,7 @@
 #include "helper.H"
 #include "Timeline.H"
 #include <tinyxml.h>
+#include <cstring>
 
 void RenderDialog::cb_File_i(Fl_Button*, void*) {
   export_filename->value( fl_file_chooser( "Set Export Filename", 0, 0 ) );
@@ -52,6 +53,7 @@ if(!nle::ffmpeg_video_encoder(selectedFormat.video_codec))switch ( preset->m_fil
 		fl_filename_setext( buffer, ".3gp" );
 		break;
 }
+if(preset->container()=="webm")fl_filename_setext(buffer,".webm");
 if(nle::ffmpeg_video_encoder(selectedFormat.video_codec)&&!*fl_filename_ext(buffer))strncat(buffer,strcmp(selectedFormat.video_codec,"vp9_qsv")==0?".mkv":".mp4",sizeof(buffer)-strlen(buffer)-1);
 export_filename->value( buffer );
 #endif
@@ -547,6 +549,8 @@ void CustomFormatDialog::cb_audio_codec_menu_i(Fl_Choice* o, void*) {
   audio_codec = o->menu()[o->value()].user_data();
 m_preset->setAudioCodec( (lqt_codec_info_t*)audio_codec );
 audio_bitrate->value( m_preset->audiobitrate() );
+if(audio_codec && !std::strcmp(static_cast<lqt_codec_info_t*>(audio_codec)->name,"none"))audio_options->deactivate();
+else audio_options->activate();
 if ( audio_bitrate->value() < 0 ) {
 	audio_bitrate->deactivate();
 } else {
@@ -568,6 +572,8 @@ void CustomFormatDialog::cb_audio_options_i(Fl_Button*, void*) {
 	while (dlg.codecOptions->shown())
 		Fl::wait();
 	audio_bitrate->value( m_preset->audiobitrate() );
+if(audio_codec && !std::strcmp(static_cast<lqt_codec_info_t*>(audio_codec)->name,"none"))audio_options->deactivate();
+else audio_options->activate();
 };
 }
 void CustomFormatDialog::cb_audio_options(Fl_Button* o, void* v) {
@@ -636,35 +642,62 @@ void CustomFormatDialog::cb_audio_bitrate(Fl_Value_Input* o, void* v) {
 }
 
 void CustomFormatDialog::cb_Quicktime_i(Fl_Menu_*, void*) {
-  nle::setAudioCodecMenu( audio_codec_menu, LQT_FILE_QT );
-nle::setVideoCodecMenu( video_codec_menu, LQT_FILE_QT );
+  selectContainer(0);
 }
 void CustomFormatDialog::cb_Quicktime(Fl_Menu_* o, void* v) {
   ((CustomFormatDialog*)(o->parent()->user_data()))->cb_Quicktime_i(o,v);
 }
 
 void CustomFormatDialog::cb_AVI_i(Fl_Menu_*, void*) {
-  nle::setAudioCodecMenu( audio_codec_menu, LQT_FILE_AVI_ODML | LQT_FILE_AVI );
-nle::setVideoCodecMenu( video_codec_menu, LQT_FILE_AVI_ODML | LQT_FILE_AVI );
+  selectContainer(1);
 }
 void CustomFormatDialog::cb_AVI(Fl_Menu_* o, void* v) {
   ((CustomFormatDialog*)(o->parent()->user_data()))->cb_AVI_i(o,v);
 }
 
 void CustomFormatDialog::cb_MP4_i(Fl_Menu_*, void*) {
-  nle::setAudioCodecMenu( audio_codec_menu, LQT_FILE_MP4 );
-nle::setVideoCodecMenu( video_codec_menu, LQT_FILE_MP4 );
+  selectContainer(2);
 }
 void CustomFormatDialog::cb_MP4(Fl_Menu_* o, void* v) {
   ((CustomFormatDialog*)(o->parent()->user_data()))->cb_MP4_i(o,v);
 }
 
 void CustomFormatDialog::cb_3GP_i(Fl_Menu_*, void*) {
-  nle::setAudioCodecMenu( audio_codec_menu, LQT_FILE_3GP );
-nle::setVideoCodecMenu( video_codec_menu, LQT_FILE_3GP );
+  selectContainer(3);
 }
 void CustomFormatDialog::cb_3GP(Fl_Menu_* o, void* v) {
   ((CustomFormatDialog*)(o->parent()->user_data()))->cb_3GP_i(o,v);
+}
+
+void CustomFormatDialog::cb_WebM_i(Fl_Menu_*, void*) { selectContainer(4); }
+void CustomFormatDialog::cb_WebM(Fl_Menu_* o, void* v) {
+  ((CustomFormatDialog*)(o->parent()->user_data()))->cb_WebM_i(o,v);
+}
+
+void CustomFormatDialog::selectContainer(int index) {
+  const int types[] = {LQT_FILE_QT, LQT_FILE_AVI_ODML | LQT_FILE_AVI, LQT_FILE_MP4, LQT_FILE_3GP, nle::WEBM_CONTAINER};
+  if(index<0 || index>4)return;
+  auto oldVideo=static_cast<lqt_codec_info_t*>(video_codec);
+  auto oldAudio=static_cast<lqt_codec_info_t*>(audio_codec);
+  lqt_container_menu->value(index);
+  m_preset->container(index==4?"webm":"");
+  nle::setVideoCodecMenu(video_codec_menu,types[index]);
+  nle::setAudioCodecMenu(audio_codec_menu,types[index]);
+  auto select=[](Fl_Choice* menu,lqt_codec_info_t* old,const char* preferred) {
+    int fallback=-1, desired=-1;
+    for(int i=0;i<menu->size();++i) {
+      auto item=static_cast<lqt_codec_info_t*>(menu->menu()[i].user_data());
+      if(!item)continue;
+      if(fallback<0)fallback=i;
+      if(preferred && !std::strcmp(item->name,preferred))fallback=i;
+      if(old && !std::strcmp(item->name,old->name))desired=i;
+    }
+    menu->value(desired>=0?desired:fallback);
+  };
+  select(video_codec_menu,oldVideo,index==4?"vp9_qsv":nullptr);
+  select(audio_codec_menu,oldAudio,index==4?"libopus":nullptr);
+  if(video_codec_menu->mvalue())cb_video_codec_menu_i(video_codec_menu,nullptr);
+  if(audio_codec_menu->mvalue())cb_audio_codec_menu_i(audio_codec_menu,nullptr);
 }
 
 Fl_Menu_Item CustomFormatDialog::menu_lqt_container_menu[] = {
@@ -672,6 +705,7 @@ Fl_Menu_Item CustomFormatDialog::menu_lqt_container_menu[] = {
  {"AVI", 0,  (Fl_Callback*)CustomFormatDialog::cb_AVI, 0, 0, FL_NORMAL_LABEL, 0, 14, 0},
  {"MP4", 0,  (Fl_Callback*)CustomFormatDialog::cb_MP4, 0, 0, FL_NORMAL_LABEL, 0, 14, 0},
  {"3GP", 0,  (Fl_Callback*)CustomFormatDialog::cb_3GP, 0, 0, FL_NORMAL_LABEL, 0, 14, 0},
+ {"WebM (.webm)", 0, (Fl_Callback*)CustomFormatDialog::cb_WebM, 0, 0, FL_NORMAL_LABEL, 0, 14, 0},
  {0,0,0,0,0,0,0,0,0}
 };
 
@@ -820,6 +854,11 @@ nle::EncodingPreset* CustomFormatDialog::getEncodingPreset() {
   if ( !go ) {
 	return 0;
 }
+if(!video_codec_menu->mvalue() || !video_codec_menu->mvalue()->user_data()
+   || !audio_codec_menu->mvalue() || !audio_codec_menu->mvalue()->user_data()) {
+    fl_alert("Choose a supported video codec and audio mode.");
+    return 0;
+}
 nle::video_format fmt;
 nle::EncodingPreset* preset = new nle::EncodingPreset( m_preset );
 preset->getFormat(&fmt);
@@ -882,6 +921,7 @@ switch ( frame_rate_choice->value() ) {
 }
 
 preset->setFormat(&fmt);
+preset->container(lqt_container_menu->value()==4?"webm":"");
 #if (LQT_CODEC_API_VERSION & 0xffff) > 6
 switch ( lqt_container_menu->value() ) {
 	case 0:
@@ -915,13 +955,13 @@ frame_size_h->value(fmt.h);
 interlacing->value(fmt.interlacing);
 pixel_aspect_ratio->value(nle::pixel_aspect_ratio_to_string(fmt.pixel_aspect_ratio));
 
-nle::setAudioCodecMenu( audio_codec_menu, m_preset->m_file_type );
-nle::setVideoCodecMenu( video_codec_menu, m_preset->m_file_type );
+nle::setAudioCodecMenu( audio_codec_menu, m_preset->container()=="webm"?nle::WEBM_CONTAINER:m_preset->m_file_type );
+nle::setVideoCodecMenu( video_codec_menu, m_preset->container()=="webm"?nle::WEBM_CONTAINER:m_preset->m_file_type );
 
 int len = video_codec_menu->size();
 for ( int i = 0; i < len; i++ ) {
 	lqt_codec_info_t* codec_info = (lqt_codec_info_t*)video_codec_menu->menu()[i].user_data();
-	if ( strcmp( fmt.video_codec, codec_info->name ) == 0 ) {
+	if ( codec_info && strcmp( fmt.video_codec, codec_info->name ) == 0 ) {
 		video_codec_menu->value(i);
 		video_codec = codec_info;
 		m_preset->setVideoCodec( (lqt_codec_info_t*)video_codec );
@@ -939,11 +979,13 @@ for ( int i = 0; i < len; i++ ) {
 len = audio_codec_menu->size();
 for ( int i = 0; i < len; i++ ) {
 	lqt_codec_info_t* codec_info = (lqt_codec_info_t*)audio_codec_menu->menu()[i].user_data();
-	if ( strcmp( fmt.audio_codec, codec_info->name ) == 0 ) {
+	if ( codec_info && strcmp( fmt.audio_codec, codec_info->name ) == 0 ) {
 		audio_codec_menu->value(i);
 		audio_codec = codec_info;
 		m_preset->setAudioCodec( (lqt_codec_info_t*)audio_codec );
 		audio_bitrate->value( m_preset->audiobitrate() );
+if(audio_codec && !std::strcmp(static_cast<lqt_codec_info_t*>(audio_codec)->name,"none"))audio_options->deactivate();
+else audio_options->activate();
 		if ( audio_bitrate->value() <= 0 ) {
 			audio_bitrate->deactivate();
 		} else {
@@ -975,7 +1017,8 @@ switch ( fmt.framerate.frame_duration ) {
 		break;
 }
 #if (LQT_CODEC_API_VERSION & 0xffff) > 6
-switch ( m_preset->m_file_type ) {
+if(m_preset->container()=="webm")lqt_container_menu->value(4);
+else switch ( m_preset->m_file_type ) {
 	case LQT_FILE_QT:
 		lqt_container_menu->value( 0 );
 		break;

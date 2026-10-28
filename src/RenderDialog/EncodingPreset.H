@@ -35,6 +35,7 @@ class TiXmlElement;
 namespace nle
 {
 
+constexpr int WEBM_CONTAINER = 1 << 28;
 void setAudioCodecMenu( Fl_Choice* menu, int type );
 void setVideoCodecMenu( Fl_Choice* menu, int type );
 
@@ -89,10 +90,13 @@ class IVideoFileWriter;
 
 class EncodingPreset
 {
+    std::string m_container;
 	public:
 		EncodingPreset();
 		EncodingPreset( EncodingPreset* preset );
 		~EncodingPreset();
+		const std::string& container() const { return m_container; }
+        void container(const std::string& value) { m_container = value; }
 		IVideoFileWriter* getFileWriter( const char* filename );
 		void writeXML( TiXmlElement* );
 		void readXML( TiXmlElement* );

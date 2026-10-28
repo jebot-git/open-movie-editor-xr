@@ -13,3 +13,5 @@
 /stage-system/
 
 **/.deps/
+
+/build-*/

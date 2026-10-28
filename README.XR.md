@@ -79,7 +79,9 @@ video cuts are quantized to the selected rational output frame rate.
 ## DomeD conventions
 
 The same patched FLTK 1.4.5 as DomeD is the default and only built frontend.
-Arc's shared appearance and native DBusMenu/Wayland appmenu bridge are reused.
+Arc's shared appearance is reused. The native DBusMenu/Wayland appmenu bridge
+is included in this repository so another project's source changes cannot
+change the editor's menu contract.
 The original File, Edit, Tracks, View, Stereo and Help commands are exported
 with enabled states, shortcuts and radio/check state. DomeD supplies its
 universal Window commands. The main menu remains usable outside DomeD.
@@ -183,3 +185,30 @@ and bitrate 8000000 bits/s. Without `--sbs`, the project output layout is used.
 `--device` overrides `OME_QSV_DEVICE` for that invocation. Codec availability
 still depends on the configured FFmpeg build and hardware. The source manual
 also distinguishes the original project library from temporary XR preview files.
+
+## Presets and menu corrections (2026-10-28)
+
+The preset editor includes **WebM (.webm)** with compatible VP9/AV1 video and
+Opus/Vorbis audio choices. The explicit container survives preset copying and
+XML save/reopen, and export uses the WebM muxer and `.webm` suffix. Existing
+presets without a container attribute retain their earlier filename-based
+FFmpeg container selection. Unsupported codec/container combinations report an
+export failure and retain any existing destination.
+
+Choose **No audio** in the Audio Codec list to export video without an audio
+stream. Audio options/bitrate controls become inactive; the choice survives
+preset save/reopen. The native FFmpeg and retained libquicktime paths both honor
+it. WebM Opus finalization also handles an empty resampler flush correctly.
+
+The original main menu now uses `DesktopMenuBar`, retaining shortcuts while
+DomeD draws the commands. It collapses only after the registrar and the window
+association exist, and returns if the menu host disappears. The project chooser
+remains a separate control in the editor. The system launcher retains `dome-link`
+routing when available.
+
+`ctest --test-dir build-fixes-release --output-on-failure` exercises the actual
+preset editor, copy/XML/reopen and independently decoded VP9-only/VP9+Opus
+WebM exports, plus real menu collapse, command dispatch and host-loss fallback
+on a private bus/display. `OME_BINARY=/path/to/openmovieeditor python3
+tests/engine/test_dome.py` checks the native Wayland editor under an isolated
+DomeD, including exported commands, radio states, editing shortcuts and dialogs.

@@ -69,7 +69,7 @@ struct FFmpegWriter::State {
     check(av_samples_alloc_array_and_samples(&converted,&linesize,2,size,audio->sample_fmt,0),"Allocate audio conversion");
     const uint8_t *source=reinterpret_cast<const uint8_t*>(data);
     int got=swr_convert(resample,converted,size,data?&source:nullptr,count);
-    if(got>=0) {
+    if(got>0) {
       int result=av_audio_fifo_realloc(fifo,av_audio_fifo_size(fifo)+got);
       if(result<0){av_freep(&converted[0]);av_freep(&converted);check(result,"Grow audio FIFO");}
       av_audio_fifo_write(fifo,reinterpret_cast<void**>(converted),got);
@@ -84,7 +84,7 @@ FFmpegWriter::FFmpegWriter(EncodingPreset *preset,const char *filename):state(ne
     if(s.stereo==1)s.format.w*=2;
     if(s.format.w<=0||s.format.h<=0||s.format.w%2||s.format.h%2||s.format.framerate.timescale<=0||s.format.framerate.frame_duration<=0)
       throw std::runtime_error("Even positive output dimensions and a positive frame rate are required");
-    s.check(avformat_alloc_output_context2(&s.mux,nullptr,nullptr,filename),"Choose output container");
+    s.check(avformat_alloc_output_context2(&s.mux,nullptr,preset->container().empty()?nullptr:preset->container().c_str(),filename),"Choose output container");
     if(!s.mux)throw std::runtime_error("Unsupported output container");
     std::string pattern=s.destination+".ome-XXXXXX";std::vector<char> temp(pattern.begin(),pattern.end());temp.push_back(0);
     int fd=mkstemp(temp.data());if(fd<0)throw std::runtime_error("Cannot create temporary output");close(fd);s.temporary=temp.data();
@@ -128,6 +128,7 @@ FFmpegWriter::FFmpegWriter(EncodingPreset *preset,const char *filename):state(ne
       auto data=av_stereo3d_alloc();if(!data)throw std::bad_alloc();data->type=AV_STEREO3D_SIDEBYSIDE;
       av_packet_side_data_add(&s.vs->codecpar->coded_side_data,&s.vs->codecpar->nb_coded_side_data,AV_PKT_DATA_STEREO3D,reinterpret_cast<uint8_t*>(data),sizeof(*data),0);
     }
+    if(std::strcmp(s.format.audio_codec,"none")!=0) {
     auto audioName=audio_encoder_name(s.format.audio_codec);const AVCodec *ac=avcodec_find_encoder_by_name(audioName.c_str());
     if(!ac)throw std::runtime_error("Audio encoder unavailable: "+audioName);
     s.audio=avcodec_alloc_context3(ac);s.as=avformat_new_stream(s.mux,nullptr);if(!s.audio||!s.as)throw std::bad_alloc();
@@ -142,6 +143,7 @@ FFmpegWriter::FFmpegWriter(EncodingPreset *preset,const char *filename):state(ne
     s.check(swr_alloc_set_opts2(&s.resample,&s.audio->ch_layout,s.audio->sample_fmt,s.audio->sample_rate,&stereo,AV_SAMPLE_FMT_FLT,48000,0,nullptr),"Create audio resampler");
     s.check(swr_init(s.resample),"Initialize audio resampler");
     s.fifo=av_audio_fifo_alloc(s.audio->sample_fmt,2,1024);if(!s.fifo)throw std::bad_alloc();
+    }
     s.pixels=av_frame_alloc();if(!s.pixels)throw std::bad_alloc();
     s.pixels->format=s.hardware?AV_PIX_FMT_NV12:s.video->pix_fmt;s.pixels->width=s.video->width;s.pixels->height=s.video->height;
     s.check(av_frame_get_buffer(s.pixels,32),"Allocate video conversion");
@@ -171,10 +173,10 @@ void FFmpegWriter::encodeVideoFrame(LazyFrame *frame) {
     else s.packets(s.video,s.vs,s.pixels);
   }catch(const std::exception &e){s.problem=e.what();}
 }
-void FFmpegWriter::encodeAudioFrame(float *buffer,int frames){if(!ok())return;try{state->convertedAudio(buffer,frames);}catch(const std::exception &e){state->problem=e.what();}}
+void FFmpegWriter::encodeAudioFrame(float *buffer,int frames){if(!ok()||!state->audio)return;try{state->convertedAudio(buffer,frames);}catch(const std::exception &e){state->problem=e.what();}}
 bool FFmpegWriter::finish(){
   auto &s=*state;if(s.committed)return true;if(!ok())return false;
-  try{s.convertedAudio(nullptr,0);s.audioFrames(true);s.packets(s.video,s.vs,nullptr);s.packets(s.audio,s.as,nullptr);s.check(av_write_trailer(s.mux),"Finish output");s.check(avio_closep(&s.mux->pb),"Close output");if(std::rename(s.temporary.c_str(),s.destination.c_str())!=0)throw std::runtime_error("Cannot publish completed output");s.committed=true;s.temporary.clear();return true;}catch(const std::exception &e){s.problem=e.what();return false;}
+  try{if(s.audio){s.convertedAudio(nullptr,0);s.audioFrames(true);s.packets(s.audio,s.as,nullptr);}s.packets(s.video,s.vs,nullptr);s.check(av_write_trailer(s.mux),"Finish output");s.check(avio_closep(&s.mux->pb),"Close output");if(std::rename(s.temporary.c_str(),s.destination.c_str())!=0)throw std::runtime_error("Cannot publish completed output");s.committed=true;s.temporary.clear();return true;}catch(const std::exception &e){s.problem=e.what();return false;}
 }
 void FFmpegWriter::cancel(){state->problem="Rendering cancelled";}
 }

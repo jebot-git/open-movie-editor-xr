@@ -4,4 +4,11 @@ ome_private='@CMAKE_INSTALL_FULL_LIBEXECDIR@/openmovieeditor'
 export LD_LIBRARY_PATH="$ome_private/lib:@OME_FLTK_LIBDIR@${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LIBQUICKTIME_PLUGIN_DIR="$ome_private/lib/libquicktime"
 export GMERLIN_PLUGIN_PATH="$ome_private/lib/gmerlin/plugins"
+case "${1-}" in
+  --help|--version|--xr-probe|--dome-present|--sbs-present|--model-xr|--openxr|--xr)
+    exec "$ome_private/openmovieeditor" "$@" ;;
+esac
+if [ -x '@CMAKE_INSTALL_FULL_BINDIR@/dome-link' ]; then
+  exec '@CMAKE_INSTALL_FULL_BINDIR@/dome-link' -- "$ome_private/openmovieeditor" "$@"
+fi
 exec "$ome_private/openmovieeditor" "$@"

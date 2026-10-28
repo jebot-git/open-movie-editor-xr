@@ -18,6 +18,7 @@
  */
 
 #include "VideoWriterQT.H"
+#include <cstring>
 #include <cassert>
 #include <vector>
 #include <unistd.h>
@@ -89,6 +90,7 @@ VideoWriterQT::VideoWriterQT( EncodingPreset* preset, const char* filename )
 	
 	lqt_destroy_codec_info( codec );
 
+    if(std::strcmp(m_format.audio_codec,"none")!=0) {
 	codec = lqt_find_audio_codec_by_name( m_format.audio_codec );
 	if ( !codec || !codec[0] ) {
 		cerr << "Audio Codec missing: " << m_format.audio_codec << endl;
@@ -98,6 +100,8 @@ VideoWriterQT::VideoWriterQT( EncodingPreset* preset, const char* filename )
 
 	lqt_set_audio( m_qt, 2, m_format.samplerate, 16, codec[0] );
 	lqt_destroy_codec_info( codec );
+
+    }
 
 	preset->set2( m_qt );
 	m_samplerate = m_format.samplerate;
@@ -132,6 +136,7 @@ void VideoWriterQT::encodeVideoFrame( LazyFrame* frame )
 }
 void VideoWriterQT::encodeAudioFrame( float* buffer, int frames )
 {
+	if(std::strcmp(m_format.audio_codec,"none")==0)return;
 	float *buffer_p[2] = { left_buffer, right_buffer };
 	assert( frames <= 32000 );
 	for ( int i = 0; i < frames; i++ ) {
